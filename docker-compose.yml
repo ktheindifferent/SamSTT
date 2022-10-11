@@ -1,0 +1,10 @@
+version: '3.7'
+services:
+  api:
+    build: .
+    container_name: 'api'
+    ports:
+      - '127.0.0.1:8000:8000'
+    restart: 'unless-stopped'
+    volumes:
+      - './model.pbmm:/app/model.pbmm:ro'
