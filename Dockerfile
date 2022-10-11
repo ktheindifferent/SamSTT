@@ -11,7 +11,7 @@ RUN pip install -r /requirements.pip
 FROM python:3.8
 
 RUN apt-get update \
- && apt-get install --no-install-recommends -y ffmpeg \
+ && apt-get install --no-install-recommends -y ffmpeg wget \
  && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid=1000 app \
@@ -23,6 +23,8 @@ ENV PATH=/venv/bin/:$PATH
 
 COPY --chown=app:app ./stt/ /app/stt/
 WORKDIR /app
+
+RUN wget https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.pbmm -O /app/model.pbmm
 
 EXPOSE 8000
 
