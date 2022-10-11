@@ -1,5 +1,7 @@
 FROM python:3.8 as build
 
+RUN echo "0.0.1"
+
 RUN pip install -U pip virtualenv \
  && virtualenv -p `which python3` /venv/
 
