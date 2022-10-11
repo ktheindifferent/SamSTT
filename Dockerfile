@@ -14,6 +14,7 @@ RUN apt-get update \
  && apt-get install --no-install-recommends -y ffmpeg wget \
  && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir /app
 RUN wget https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.pbmm -O /app/model.pbmm
 
 
