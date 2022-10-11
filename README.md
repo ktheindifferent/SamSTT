@@ -12,6 +12,9 @@ $ curl -X POST -F "speech=@test.mp3" http://127.0.0.1:8000/api/v1/stt
 {"text":"experience proves this","time":0.9638644850056153}
 ```
 
+curl -X POST -F "speech=@test.mp3" https://stt.opensam.foundation/api/v1/stt
+
+
 ## Setup
 
 ### 0. Checkout repository
