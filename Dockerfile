@@ -14,6 +14,9 @@ RUN apt-get update \
  && apt-get install --no-install-recommends -y ffmpeg wget \
  && rm -rf /var/lib/apt/lists/*
 
+RUN wget https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.pbmm -O /app/model.pbmm
+
+
 RUN groupadd --gid=1000 app \
  && useradd --uid=1000 --gid=1000 --system app
 USER app
@@ -24,7 +27,6 @@ ENV PATH=/venv/bin/:$PATH
 COPY --chown=app:app ./stt/ /app/stt/
 WORKDIR /app
 
-RUN wget https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.pbmm -O /app/model.pbmm
 
 EXPOSE 8000
 
