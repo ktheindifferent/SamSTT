@@ -9,7 +9,7 @@ from deepspeech import Model
 
 class SpeechToTextEngine:
     def __init__(self):
-        self.model = Model("/app/model.tflite")
+        self.model = Model(model_path=Path(__file__).parents[1].joinpath('model.tflite').absolute().as_posix())
 
     def normalize_audio(self, audio):
         out, err = ffmpeg.input('pipe:0') \
