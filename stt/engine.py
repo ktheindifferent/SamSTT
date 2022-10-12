@@ -4,7 +4,7 @@ from pathlib import Path
 
 import ffmpeg
 import numpy as np
-from deepspeech import Model
+from stt import Model
 
 
 class SpeechToTextEngine:
