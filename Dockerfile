@@ -28,10 +28,10 @@ USER app
 COPY --from=build --chown=app:app /venv/ /venv/
 ENV PATH=/venv/bin/:$PATH
 
-COPY --chown=app:app ./stt/ /app/stt/
+COPY --chown=app:app ./stts/ /app/stts/
 WORKDIR /app
 
 
 EXPOSE 8000
 
-CMD python -m stt.app
+CMD python -m stts.app
