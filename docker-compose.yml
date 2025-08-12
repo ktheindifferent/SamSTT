@@ -1,10 +1,85 @@
 version: '3.7'
 services:
+  # Default configuration - uses DeepSpeech with downloaded model
   api:
     build: .
-    container_name: 'api'
+    container_name: 'stt-api'
     ports:
       - '127.0.0.1:8000:8000'
     restart: 'unless-stopped'
+    environment:
+      - STT_ENGINE=deepspeech
+      - MAX_ENGINE_WORKERS=2
+      - LOG_LEVEL=INFO
     volumes:
-      - './model.pbmm:/app/model.pbmm:ro'
+      # Mount model files if you have them locally
+      # - './model.pbmm:/app/model.pbmm:ro'
+      # - './model.tflite:/app/model.tflite:ro'
+      # - './vosk_model:/app/vosk_model:ro'
+      - './models:/app/models:ro'  # Mount all models from local directory
+
+  # Example: Whisper configuration (best accuracy, no model files needed)
+  api-whisper:
+    build:
+      context: .
+      args:
+        INSTALL_WHISPER: "true"
+    container_name: 'stt-api-whisper'
+    ports:
+      - '127.0.0.1:8001:8000'
+    restart: 'unless-stopped'
+    environment:
+      - STT_ENGINE=whisper
+      - WHISPER_MODEL_SIZE=base  # tiny, base, small, medium, large
+      - WHISPER_DEVICE=cpu  # or cuda if you have GPU
+      - MAX_ENGINE_WORKERS=2
+      - LOG_LEVEL=INFO
+    profiles:
+      - whisper
+
+  # Example: Vosk configuration (lightweight, many languages)
+  api-vosk:
+    build:
+      context: .
+      args:
+        INSTALL_VOSK: "true"
+        DOWNLOAD_VOSK_MODEL: "true"
+    container_name: 'stt-api-vosk'
+    ports:
+      - '127.0.0.1:8002:8000'
+    restart: 'unless-stopped'
+    environment:
+      - STT_ENGINE=vosk
+      - VOSK_MODEL_PATH=/app/vosk_model
+      - MAX_ENGINE_WORKERS=2
+      - LOG_LEVEL=INFO
+    volumes:
+      # Or mount your own Vosk model
+      # - './vosk-model-en-us-0.22:/app/vosk_model:ro'
+      - './models/vosk:/app/vosk_model:ro'
+    profiles:
+      - vosk
+
+  # Example: Multi-engine configuration with fallback
+  api-multi:
+    build:
+      context: .
+      args:
+        INSTALL_WHISPER: "true"
+        INSTALL_VOSK: "true"
+        INSTALL_COQUI: "true"
+        DOWNLOAD_COQUI_MODEL: "true"
+        DOWNLOAD_VOSK_MODEL: "true"
+    container_name: 'stt-api-multi'
+    ports:
+      - '127.0.0.1:8003:8000'
+    restart: 'unless-stopped'
+    environment:
+      - STT_ENGINE=whisper  # Primary engine
+      - WHISPER_MODEL_SIZE=tiny  # Use smaller model for speed
+      - MAX_ENGINE_WORKERS=4
+      - LOG_LEVEL=INFO
+    volumes:
+      - './models:/app/models:ro'
+    profiles:
+      - multi

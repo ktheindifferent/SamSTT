@@ -1,3 +1,29 @@
-stt
+# Core dependencies
 ffmpeg-python==0.2.0
 sanic==20.9.1
+numpy
+
+# STT Engines (install the ones you need)
+# Mozilla DeepSpeech (legacy)
+stt
+
+# Coqui STT (successor to DeepSpeech)
+# STT
+
+# OpenAI Whisper
+# openai-whisper
+
+# Vosk
+# vosk
+
+# Silero (requires PyTorch)
+# torch
+# torchaudio
+# omegaconf
+
+# Wav2Vec2 (HuggingFace)
+# transformers
+# torch
+
+# Additional dependencies for audio processing
+# librosa  # For audio resampling in some engines
