@@ -1,0 +1,54 @@
+{
+  "default_engine": "whisper",
+  "initialize_all": false,
+  "deepspeech": {
+    "model_path": "/app/model.tflite",
+    "scorer_path": null
+  },
+  "whisper": {
+    "model_size": "base",
+    "device": "cpu",
+    "language": null,
+    "task": "transcribe",
+    "fp16": false,
+    "verbose": false
+  },
+  "coqui": {
+    "model_path": "/app/coqui_model.tflite",
+    "scorer_path": null,
+    "beam_width": 500,
+    "lm_alpha": 0.75,
+    "lm_beta": 1.85
+  },
+  "vosk": {
+    "model_path": "/app/vosk_model",
+    "sample_rate": 16000
+  },
+  "silero": {
+    "language": "en",
+    "device": "cpu",
+    "model_path": null
+  },
+  "wav2vec2": {
+    "model_name": "facebook/wav2vec2-base-960h",
+    "device": "cpu",
+    "cache_dir": "/app/models/wav2vec2"
+  },
+  "speechbrain": {
+    "source": "speechbrain/asr-crdnn-rnnlm-librispeech",
+    "savedir": "/app/models/speechbrain",
+    "model_type": "encoder_decoder",
+    "device": "cpu"
+  },
+  "nemo": {
+    "model_name": "QuartzNet15x5Base-En",
+    "device": "cpu",
+    "restore_from": null
+  },
+  "pocketsphinx": {
+    "model_path": null,
+    "hmm": null,
+    "lm": null,
+    "dict": null
+  }
+}

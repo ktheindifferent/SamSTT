@@ -1,0 +1,43 @@
+# Core dependencies (required)
+ffmpeg-python==0.2.0
+sanic==20.9.1
+numpy
+scipy
+
+# STT Engines - Uncomment the ones you need
+
+# Mozilla DeepSpeech (legacy)
+stt
+
+# Coqui STT (successor to DeepSpeech)  
+# STT
+
+# OpenAI Whisper (recommended for best accuracy)
+# openai-whisper
+
+# Vosk (lightweight, many languages)
+# vosk
+
+# PocketSphinx (ultra-lightweight)
+# pocketsphinx
+
+# Silero (PyTorch-based)
+# torch
+# torchaudio  
+# omegaconf
+
+# Wav2Vec2 (HuggingFace transformers)
+# transformers
+# torch
+# librosa
+
+# SpeechBrain (research-oriented toolkit)
+# speechbrain
+
+# NVIDIA NeMo (enterprise-grade)
+# nemo_toolkit[asr]
+# soundfile
+
+# Additional utilities
+# librosa  # Audio processing and resampling
+# soundfile  # Audio file I/O
