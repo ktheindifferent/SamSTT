@@ -4,6 +4,9 @@ import wave
 from io import BytesIO
 import numpy as np
 import ffmpeg
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BaseSTTEngine(ABC):
@@ -75,7 +78,25 @@ class BaseSTTEngine(ABC):
         """Check if the engine is available and properly configured"""
         try:
             return self._check_availability()
-        except:
+        except (ImportError, ModuleNotFoundError) as e:
+            # Module or dependency not installed
+            logger.debug(f"Engine {self.name} dependency not available: {e}")
+            return False
+        except (FileNotFoundError, OSError) as e:
+            # Model file not found or file system error
+            logger.debug(f"Engine {self.name} model file error: {e}")
+            return False
+        except (AttributeError, TypeError, ValueError) as e:
+            # Configuration or initialization errors
+            logger.debug(f"Engine {self.name} configuration error: {e}")
+            return False
+        except RuntimeError as e:
+            # Runtime errors (e.g., CUDA not available, memory issues)
+            logger.debug(f"Engine {self.name} runtime error: {e}")
+            return False
+        except Exception as e:
+            # Catch any other unexpected exceptions
+            logger.warning(f"Engine {self.name} unexpected error during availability check: {type(e).__name__}: {e}")
             return False
     
     def _check_availability(self) -> bool:
