@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional, List
 import logging
+import threading
 from pathlib import Path
 from .base_engine import BaseSTTEngine
 from .engines.deepspeech import DeepSpeechEngine
@@ -42,6 +43,9 @@ class STTEngineManager:
         self.config = config or {}
         self.engines: Dict[str, BaseSTTEngine] = {}
         self.default_engine_name = default_engine
+        # Thread-safe initialization locks
+        self._engine_locks: Dict[str, threading.Lock] = {}
+        self._locks_lock = threading.Lock()  # Lock for managing the locks dictionary
         self._initialize_engines()
     
     def _initialize_engines(self):
@@ -85,7 +89,7 @@ class STTEngineManager:
         logger.info(f"Added custom engine: {name}")
     
     def get_engine(self, name: Optional[str] = None) -> BaseSTTEngine:
-        """Get a specific engine or the default engine
+        """Get a specific engine or the default engine with thread-safe initialization
         
         Args:
             name: Name of the engine to get. If None, returns default engine
@@ -99,21 +103,36 @@ class STTEngineManager:
         if name is None:
             name = self.default_engine_name
         
+        # Double-checked locking pattern for thread-safe lazy initialization
         if name not in self.engines:
-            # Try to initialize on-demand
-            if name in self.ENGINES:
-                engine_config = self.config.get(name, {})
-                try:
-                    engine = self.ENGINES[name](engine_config)
-                    if engine.is_available:
-                        self.engines[name] = engine
-                        logger.info(f"Initialized {name} engine on-demand")
+            # Get or create lock for this specific engine
+            with self._locks_lock:
+                if name not in self._engine_locks:
+                    self._engine_locks[name] = threading.Lock()
+                engine_lock = self._engine_locks[name]
+            
+            # Try to initialize on-demand with proper locking
+            with engine_lock:
+                # Double-check after acquiring lock
+                if name not in self.engines:
+                    if name in self.ENGINES:
+                        engine_config = self.config.get(name, {})
+                        logger.info(f"Thread {threading.current_thread().name}: Attempting to initialize {name} engine")
+                        try:
+                            engine = self.ENGINES[name](engine_config)
+                            if engine.is_available:
+                                self.engines[name] = engine
+                                logger.info(f"Thread {threading.current_thread().name}: Successfully initialized {name} engine on-demand")
+                            else:
+                                logger.warning(f"Thread {threading.current_thread().name}: Engine {name} is not available")
+                                raise ValueError(f"Engine {name} is not available")
+                        except Exception as e:
+                            logger.error(f"Thread {threading.current_thread().name}: Failed to initialize engine {name}: {e}")
+                            raise ValueError(f"Failed to initialize engine {name}: {e}")
                     else:
-                        raise ValueError(f"Engine {name} is not available")
-                except Exception as e:
-                    raise ValueError(f"Failed to initialize engine {name}: {e}")
-            else:
-                raise ValueError(f"Unknown engine: {name}")
+                        raise ValueError(f"Unknown engine: {name}")
+                else:
+                    logger.debug(f"Thread {threading.current_thread().name}: Engine {name} already initialized by another thread")
         
         return self.engines[name]
     
