@@ -1,11 +1,18 @@
 from os import getenv
 import logging
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from sanic import Sanic
 from sanic.response import json
-from sanic.exceptions import InvalidUsage
+from sanic.exceptions import InvalidUsage, RequestTimeout
 
 from .engine import SpeechToTextEngine
+from .validators import (
+    SecurityMiddleware, 
+    validate_audio_file, 
+    REQUEST_TIMEOUT,
+    MAX_FILE_SIZE
+)
 
 
 # Configure logging
@@ -20,6 +27,11 @@ executor = ThreadPoolExecutor(max_workers=MAX_ENGINE_WORKERS)
 
 app = Sanic("stt-service")
 
+# Configure request size limit
+app.config.REQUEST_MAX_SIZE = MAX_FILE_SIZE
+app.config.REQUEST_TIMEOUT = REQUEST_TIMEOUT
+app.config.RESPONSE_TIMEOUT = REQUEST_TIMEOUT
+
 
 @app.route('/api/v1/stt', methods=['POST'])
 async def stt(request):
@@ -28,6 +40,19 @@ async def stt(request):
     if not speech:
         raise InvalidUsage("Missing \"speech\" payload.")
     
+    # Validate the audio file
+    client_id = SecurityMiddleware.get_client_id(request)
+    is_valid, error_msg, metadata = validate_audio_file(
+        speech.body,
+        filename=speech.name,
+        content_type=request.headers.get('Content-Type'),
+        client_id=client_id
+    )
+    
+    if not is_valid:
+        logger.warning(f"File validation failed for {client_id}: {error_msg}")
+        raise InvalidUsage(error_msg)
+    
     # Check if specific engine is requested via query parameter or header
     engine_name = request.args.get('engine') or request.headers.get('X-STT-Engine')
     
@@ -35,9 +60,13 @@ async def stt(request):
     inference_start = perf_counter()
     
     try:
-        result = await app.loop.run_in_executor(
-            executor, 
-            lambda: engine.transcribe(speech.body, engine=engine_name)
+        # Add timeout for transcription
+        result = await asyncio.wait_for(
+            app.loop.run_in_executor(
+                executor, 
+                lambda: engine.transcribe(speech.body, engine=engine_name)
+            ),
+            timeout=REQUEST_TIMEOUT
         )
         inference_end = perf_counter() - inference_start
         
@@ -47,6 +76,9 @@ async def stt(request):
             'engine': result.get('engine'),
             'fallback': result.get('fallback', False)
         })
+    except asyncio.TimeoutError:
+        logger.error(f"STT request timed out after {REQUEST_TIMEOUT} seconds")
+        raise RequestTimeout(f"Request timed out after {REQUEST_TIMEOUT} seconds")
     except Exception as e:
         logger.error(f"STT failed: {e}")
         raise InvalidUsage(f"STT processing failed: {str(e)}")
@@ -59,13 +91,30 @@ async def stt_with_engine(request, engine_name):
     if not speech:
         raise InvalidUsage("Missing \"speech\" payload.")
     
+    # Validate the audio file
+    client_id = SecurityMiddleware.get_client_id(request)
+    is_valid, error_msg, metadata = validate_audio_file(
+        speech.body,
+        filename=speech.name,
+        content_type=request.headers.get('Content-Type'),
+        client_id=client_id
+    )
+    
+    if not is_valid:
+        logger.warning(f"File validation failed for {client_id}: {error_msg}")
+        raise InvalidUsage(error_msg)
+    
     from time import perf_counter
     inference_start = perf_counter()
     
     try:
-        result = await app.loop.run_in_executor(
-            executor,
-            lambda: engine.transcribe(speech.body, engine=engine_name)
+        # Add timeout for transcription
+        result = await asyncio.wait_for(
+            app.loop.run_in_executor(
+                executor,
+                lambda: engine.transcribe(speech.body, engine=engine_name)
+            ),
+            timeout=REQUEST_TIMEOUT
         )
         inference_end = perf_counter() - inference_start
         
@@ -77,6 +126,9 @@ async def stt_with_engine(request, engine_name):
         })
     except ValueError as e:
         raise InvalidUsage(f"Invalid engine: {str(e)}")
+    except asyncio.TimeoutError:
+        logger.error(f"STT request timed out after {REQUEST_TIMEOUT} seconds")
+        raise RequestTimeout(f"Request timed out after {REQUEST_TIMEOUT} seconds")
     except Exception as e:
         logger.error(f"STT failed with {engine_name}: {e}")
         raise InvalidUsage(f"STT processing failed: {str(e)}")
@@ -125,10 +177,31 @@ async def health(request):
     })
 
 
+@app.middleware('request')
+async def security_middleware(request):
+    """Middleware for security checks on all requests"""
+    # Skip validation for health and info endpoints
+    if request.path in ['/health', '/api/v1/engines'] or request.method == 'GET':
+        return
+    
+    # Additional security headers
+    request.ctx.client_id = SecurityMiddleware.get_client_id(request)
+
+
+@app.middleware('response')
+async def security_response_middleware(request, response):
+    """Add security headers to responses"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Content-Security-Policy'] = "default-src 'self'"
+    
+
 if __name__ == '__main__':
     # Log available engines at startup
     available = engine.list_engines()
     logger.info(f"Starting STT service with {len(available)} available engines: {available}")
     logger.info(f"Default engine: {engine.manager.default_engine_name}")
+    logger.info(f"Security settings: Max file size: {MAX_FILE_SIZE/1024/1024:.1f}MB, Request timeout: {REQUEST_TIMEOUT}s")
     
     app.run(host='0.0.0.0', port=8000)
