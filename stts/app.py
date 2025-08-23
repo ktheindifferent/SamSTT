@@ -6,6 +6,17 @@ from sanic.response import json
 from sanic.exceptions import InvalidUsage
 
 from .engine import SpeechToTextEngine
+from .exceptions import (
+    STTException,
+    EngineNotAvailableError,
+    ModelNotFoundError,
+    AudioProcessingError,
+    InvalidAudioError,
+    TranscriptionError,
+    ConfigurationError,
+    InsufficientResourcesError,
+    EngineTimeoutError
+)
 
 
 # Configure logging
@@ -41,15 +52,45 @@ async def stt(request):
         )
         inference_end = perf_counter() - inference_start
         
-        return json({
+        response_data = {
             'text': result['text'],
             'time': inference_end,
             'engine': result.get('engine'),
             'fallback': result.get('fallback', False)
-        })
+        }
+        
+        # Include original error info if fallback was used
+        if result.get('original_error'):
+            response_data['original_error'] = result['original_error']
+        
+        return json(response_data)
+    except InvalidAudioError as e:
+        logger.error(f"Invalid audio data: {e.message}")
+        raise InvalidUsage(f"Invalid audio data: {e.message}", status_code=400)
+    except AudioProcessingError as e:
+        logger.error(f"Audio processing failed: {e.message}")
+        raise InvalidUsage(f"Audio processing failed: {e.message}", status_code=400)
+    except EngineNotAvailableError as e:
+        logger.error(f"Engine not available: {e.message}")
+        raise InvalidUsage(f"Engine not available: {e.message}", status_code=503)
+    except ModelNotFoundError as e:
+        logger.error(f"Model not found: {e.message}")
+        raise InvalidUsage(f"Model not found: {e.message}", status_code=503)
+    except InsufficientResourcesError as e:
+        logger.error(f"Insufficient resources: {e.message}")
+        raise InvalidUsage(f"Insufficient resources: {e.message}", status_code=503)
+    except EngineTimeoutError as e:
+        logger.error(f"Transcription timeout: {e.message}")
+        raise InvalidUsage(f"Transcription timeout: {e.message}", status_code=504)
+    except TranscriptionError as e:
+        logger.error(f"Transcription failed: {e.message}")
+        raise InvalidUsage(f"Transcription failed: {e.message}", status_code=500)
+    except STTException as e:
+        logger.error(f"STT error: {e.message}")
+        raise InvalidUsage(f"STT error: {e.message}", status_code=500)
     except Exception as e:
-        logger.error(f"STT failed: {e}")
-        raise InvalidUsage(f"STT processing failed: {str(e)}")
+        logger.error(f"Unexpected STT error: {e}")
+        raise InvalidUsage(f"STT processing failed: {str(e)}", status_code=500)
 
 
 @app.route('/api/v2/stt/<engine_name>', methods=['POST'])
@@ -69,17 +110,48 @@ async def stt_with_engine(request, engine_name):
         )
         inference_end = perf_counter() - inference_start
         
-        return json({
+        response_data = {
             'text': result['text'],
             'time': inference_end,
             'engine': result.get('engine'),
             'fallback': result.get('fallback', False)
-        })
-    except ValueError as e:
-        raise InvalidUsage(f"Invalid engine: {str(e)}")
+        }
+        
+        # Include original error info if fallback was used
+        if result.get('original_error'):
+            response_data['original_error'] = result['original_error']
+        
+        return json(response_data)
+    except ConfigurationError as e:
+        logger.error(f"Configuration error: {e.message}")
+        raise InvalidUsage(f"Configuration error: {e.message}", status_code=400)
+    except InvalidAudioError as e:
+        logger.error(f"Invalid audio data: {e.message}")
+        raise InvalidUsage(f"Invalid audio data: {e.message}", status_code=400)
+    except AudioProcessingError as e:
+        logger.error(f"Audio processing failed: {e.message}")
+        raise InvalidUsage(f"Audio processing failed: {e.message}", status_code=400)
+    except EngineNotAvailableError as e:
+        logger.error(f"Engine {engine_name} not available: {e.message}")
+        raise InvalidUsage(f"Engine {engine_name} not available: {e.message}", status_code=404)
+    except ModelNotFoundError as e:
+        logger.error(f"Model not found for {engine_name}: {e.message}")
+        raise InvalidUsage(f"Model not found: {e.message}", status_code=503)
+    except InsufficientResourcesError as e:
+        logger.error(f"Insufficient resources for {engine_name}: {e.message}")
+        raise InvalidUsage(f"Insufficient resources: {e.message}", status_code=503)
+    except EngineTimeoutError as e:
+        logger.error(f"Transcription timeout with {engine_name}: {e.message}")
+        raise InvalidUsage(f"Transcription timeout: {e.message}", status_code=504)
+    except TranscriptionError as e:
+        logger.error(f"Transcription failed with {engine_name}: {e.message}")
+        raise InvalidUsage(f"Transcription failed: {e.message}", status_code=500)
+    except STTException as e:
+        logger.error(f"STT error with {engine_name}: {e.message}")
+        raise InvalidUsage(f"STT error: {e.message}", status_code=500)
     except Exception as e:
-        logger.error(f"STT failed with {engine_name}: {e}")
-        raise InvalidUsage(f"STT processing failed: {str(e)}")
+        logger.error(f"Unexpected error with {engine_name}: {e}")
+        raise InvalidUsage(f"STT processing failed: {str(e)}", status_code=500)
 
 
 @app.route('/api/v1/engines', methods=['GET'])
@@ -107,22 +179,45 @@ async def get_engine_info(request, engine_name):
     try:
         info = engine.get_engine_info(engine_name)
         return json(info)
-    except ValueError as e:
-        raise InvalidUsage(str(e))
+    except ConfigurationError as e:
+        logger.error(f"Configuration error: {e.message}")
+        raise InvalidUsage(e.message, status_code=404)
+    except STTException as e:
+        logger.error(f"Error getting engine info: {e.message}")
+        raise InvalidUsage(e.message, status_code=500)
     except Exception as e:
         logger.error(f"Failed to get engine info: {e}")
-        raise InvalidUsage(f"Failed to get engine info: {str(e)}")
+        raise InvalidUsage(f"Failed to get engine info: {str(e)}", status_code=500)
 
 
 @app.route('/health', methods=['GET'])
 async def health(request):
     """Health check endpoint"""
-    available_engines = engine.list_engines()
-    return json({
-        'status': 'healthy' if available_engines else 'degraded',
-        'engines_available': len(available_engines),
-        'engines': available_engines
-    })
+    try:
+        available_engines = engine.list_engines()
+        status = 'healthy' if available_engines else 'degraded'
+        
+        # Get detailed engine status if verbose flag is set
+        verbose = request.args.get('verbose', '').lower() == 'true'
+        response_data = {
+            'status': status,
+            'engines_available': len(available_engines),
+            'engines': available_engines
+        }
+        
+        if verbose:
+            try:
+                response_data['engine_details'] = engine.get_engine_info()
+            except Exception as e:
+                response_data['engine_details_error'] = str(e)
+        
+        return json(response_data)
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return json({
+            'status': 'unhealthy',
+            'error': str(e)
+        }, status=503)
 
 
 if __name__ == '__main__':

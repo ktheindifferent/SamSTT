@@ -2,6 +2,14 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import numpy as np
 from ..base_engine import BaseSTTEngine
+from ..exceptions import (
+    EngineNotAvailableError,
+    EngineInitializationError,
+    ModelNotFoundError,
+    TranscriptionError,
+    AudioProcessingError,
+    UnsupportedAudioFormatError
+)
 
 
 class Wav2Vec2Engine(BaseSTTEngine):
@@ -37,44 +45,82 @@ class Wav2Vec2Engine(BaseSTTEngine):
             self.model.eval()
             
         except ImportError as e:
-            raise ImportError(f"Required packages not installed: {e}. Install with: pip install transformers torch")
+            raise EngineNotAvailableError(
+                "Required packages not installed. Install with: pip install transformers torch",
+                engine="wav2vec2",
+                original_error=e
+            )
         except Exception as e:
-            raise Exception(f"Failed to initialize Wav2Vec2: {e}")
+            if "model" in str(e).lower() or "not found" in str(e).lower():
+                raise ModelNotFoundError(
+                    f"Failed to load Wav2Vec2 model '{model_name}': {e}",
+                    engine="wav2vec2",
+                    original_error=e
+                )
+            raise EngineInitializationError(
+                f"Failed to initialize Wav2Vec2 engine: {e}",
+                engine="wav2vec2",
+                original_error=e
+            )
     
     def transcribe_raw(self, audio_data: np.ndarray, sample_rate: int = 16000) -> str:
         """Transcribe using Wav2Vec2"""
-        import torch
-        
-        # Convert to float32 and normalize
-        if audio_data.dtype == np.int16:
-            audio_float = audio_data.astype(np.float32) / 32768.0
-        else:
-            audio_float = audio_data.astype(np.float32)
-        
-        # Resample if needed (Wav2Vec2 expects 16kHz)
-        if sample_rate != 16000:
-            import librosa
-            audio_float = librosa.resample(audio_float, orig_sr=sample_rate, target_sr=16000)
-        
-        # Process audio
-        inputs = self.processor(
-            audio_float, 
-            sampling_rate=16000, 
-            return_tensors="pt",
-            padding=True
-        )
-        
-        # Move to device if needed
-        if self.device != 'cpu':
-            inputs = {k: v.to(torch.device(self.device)) for k, v in inputs.items()}
-        
-        # Generate transcription
-        with torch.no_grad():
-            logits = self.model(**inputs).logits
-            predicted_ids = torch.argmax(logits, dim=-1)
-            transcription = self.processor.batch_decode(predicted_ids)[0]
-        
-        return transcription.strip()
+        try:
+            import torch
+            
+            # Convert to float32 and normalize
+            if audio_data.dtype == np.int16:
+                audio_float = audio_data.astype(np.float32) / 32768.0
+            else:
+                audio_float = audio_data.astype(np.float32)
+            
+            # Resample if needed (Wav2Vec2 expects 16kHz)
+            if sample_rate != 16000:
+                try:
+                    import librosa
+                    audio_float = librosa.resample(audio_float, orig_sr=sample_rate, target_sr=16000)
+                except Exception as e:
+                    raise AudioProcessingError(
+                        f"Failed to resample audio from {sample_rate}Hz to 16000Hz: {e}",
+                        engine="wav2vec2",
+                        original_error=e
+                    )
+            
+            # Process audio
+            try:
+                inputs = self.processor(
+                    audio_float, 
+                    sampling_rate=16000, 
+                    return_tensors="pt",
+                    padding=True
+                )
+            except Exception as e:
+                raise AudioProcessingError(
+                    f"Failed to process audio with Wav2Vec2 processor: {e}",
+                    engine="wav2vec2",
+                    original_error=e
+                )
+            
+            # Move to device if needed
+            if self.device != 'cpu':
+                inputs = {k: v.to(torch.device(self.device)) for k, v in inputs.items()}
+            
+            # Generate transcription
+            with torch.no_grad():
+                logits = self.model(**inputs).logits
+                predicted_ids = torch.argmax(logits, dim=-1)
+                transcription = self.processor.batch_decode(predicted_ids)[0]
+            
+            return transcription.strip()
+            
+        except (AudioProcessingError, UnsupportedAudioFormatError):
+            raise  # Re-raise audio processing errors
+        except Exception as e:
+            raise TranscriptionError(
+                f"Wav2Vec2 transcription failed: {e}",
+                engine="wav2vec2",
+                original_error=e
+            )
     
     def _check_availability(self) -> bool:
         """Check if Wav2Vec2 is available"""

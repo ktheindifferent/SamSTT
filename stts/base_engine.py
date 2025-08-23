@@ -4,6 +4,11 @@ import wave
 from io import BytesIO
 import numpy as np
 import ffmpeg
+from .exceptions import (
+    AudioProcessingError,
+    InvalidAudioError,
+    EngineInitializationError
+)
 
 
 class BaseSTTEngine(ABC):
@@ -11,7 +16,18 @@ class BaseSTTEngine(ABC):
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
-        self.initialize()
+        try:
+            self.initialize()
+        except EngineInitializationError:
+            # Re-raise engine initialization errors as-is
+            raise
+        except Exception as e:
+            # Wrap any other initialization errors
+            raise EngineInitializationError(
+                f"Failed to initialize {self.name} engine: {str(e)}",
+                engine=self.name.lower(),
+                original_error=e
+            )
     
     @abstractmethod
     def initialize(self):
@@ -40,12 +56,37 @@ class BaseSTTEngine(ABC):
         Returns:
             Normalized WAV audio bytes
         """
-        out, err = ffmpeg.input('pipe:0') \
-            .output('pipe:1', f='WAV', acodec='pcm_s16le', ac=1, ar='16k', loglevel='error', hide_banner=None) \
-            .run(input=audio, capture_stdout=True, capture_stderr=True)
-        if err:
-            raise Exception(f"Audio normalization error: {err}")
-        return out
+        try:
+            out, err = ffmpeg.input('pipe:0') \
+                .output('pipe:1', f='WAV', acodec='pcm_s16le', ac=1, ar='16k', loglevel='error', hide_banner=None) \
+                .run(input=audio, capture_stdout=True, capture_stderr=True)
+            if err:
+                # Check for common error patterns
+                err_str = err.decode('utf-8') if isinstance(err, bytes) else str(err)
+                if 'invalid data' in err_str.lower() or 'could not find' in err_str.lower():
+                    raise InvalidAudioError(
+                        f"Invalid or corrupted audio data: {err_str}",
+                        engine=self.name.lower()
+                    )
+                raise AudioProcessingError(
+                    f"Audio normalization failed: {err_str}",
+                    engine=self.name.lower()
+                )
+            return out
+        except ffmpeg.Error as e:
+            raise AudioProcessingError(
+                f"FFmpeg error during audio normalization: {str(e)}",
+                engine=self.name.lower(),
+                original_error=e
+            )
+        except Exception as e:
+            if isinstance(e, (AudioProcessingError, InvalidAudioError)):
+                raise
+            raise AudioProcessingError(
+                f"Unexpected error during audio normalization: {str(e)}",
+                engine=self.name.lower(),
+                original_error=e
+            )
     
     def transcribe(self, audio: bytes) -> str:
         """Transcribe audio from bytes
@@ -56,13 +97,29 @@ class BaseSTTEngine(ABC):
         Returns:
             Transcribed text
         """
+        # Normalize audio (errors will be raised by normalize_audio)
         normalized_audio = self.normalize_audio(audio)
-        audio_io = BytesIO(normalized_audio)
         
-        with wave.Wave_read(audio_io) as wav:
-            audio_data = np.frombuffer(wav.readframes(wav.getnframes()), np.int16)
-            sample_rate = wav.getframerate()
+        try:
+            audio_io = BytesIO(normalized_audio)
+            
+            with wave.Wave_read(audio_io) as wav:
+                audio_data = np.frombuffer(wav.readframes(wav.getnframes()), np.int16)
+                sample_rate = wav.getframerate()
+        except wave.Error as e:
+            raise AudioProcessingError(
+                f"Failed to read normalized WAV data: {str(e)}",
+                engine=self.name.lower(),
+                original_error=e
+            )
+        except Exception as e:
+            raise AudioProcessingError(
+                f"Failed to process audio data: {str(e)}",
+                engine=self.name.lower(),
+                original_error=e
+            )
         
+        # Call the engine-specific transcription (errors handled by implementation)
         return self.transcribe_raw(audio_data, sample_rate)
     
     @property

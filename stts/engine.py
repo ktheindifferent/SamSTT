@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any
 import ffmpeg
 import numpy as np
 from .engine_manager import STTEngineManager
+from .exceptions import STTException, ConfigurationError
 
 
 class SpeechToTextEngine:

@@ -2,6 +2,14 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import numpy as np
 from ..base_engine import BaseSTTEngine
+from ..exceptions import (
+    EngineNotAvailableError,
+    EngineInitializationError,
+    ModelNotFoundError,
+    TranscriptionError,
+    AudioProcessingError,
+    UnsupportedAudioFormatError
+)
 
 
 class NeMoEngine(BaseSTTEngine):
@@ -39,9 +47,25 @@ class NeMoEngine(BaseSTTEngine):
                 self.required_sample_rate = self.model.cfg.sample_rate
                 
         except ImportError as e:
-            raise ImportError(f"NeMo not installed: {e}. Install with: pip install nemo_toolkit[asr]")
+            raise EngineNotAvailableError(
+                "NeMo not installed. Install with: pip install nemo_toolkit[asr]",
+                engine="nemo",
+                original_error=e
+            )
         except Exception as e:
-            raise Exception(f"Failed to initialize NeMo: {e}")
+            if "model" in str(e).lower() or "checkpoint" in str(e).lower() or "not found" in str(e).lower():
+                model_ref = restore_from or model_name
+                raise ModelNotFoundError(
+                    f"Failed to load NeMo model '{model_ref}': {e}",
+                    model_path=restore_from,
+                    engine="nemo",
+                    original_error=e
+                )
+            raise EngineInitializationError(
+                f"Failed to initialize NeMo engine: {e}",
+                engine="nemo",
+                original_error=e
+            )
     
     def transcribe_raw(self, audio_data: np.ndarray, sample_rate: int = 16000) -> str:
         """Transcribe using NeMo"""
@@ -60,16 +84,38 @@ class NeMoEngine(BaseSTTEngine):
                     audio_float = audio_data.astype(np.float32)
                 
                 # Write to temporary file
-                sf.write(tmp_file.name, audio_float, sample_rate)
+                try:
+                    sf.write(tmp_file.name, audio_float, sample_rate)
+                except Exception as e:
+                    raise AudioProcessingError(
+                        f"Failed to write audio data to temporary file: {e}",
+                        engine="nemo",
+                        original_error=e
+                    )
                 
                 # Transcribe
-                transcriptions = self.model.transcribe([tmp_file.name])
+                try:
+                    transcriptions = self.model.transcribe([tmp_file.name])
+                except Exception as e:
+                    raise TranscriptionError(
+                        f"NeMo transcription failed: {e}",
+                        engine="nemo",
+                        original_error=e
+                    )
                 
                 # Return first transcription
                 if transcriptions and len(transcriptions) > 0:
                     return transcriptions[0]
                 return ""
                 
+            except (AudioProcessingError, TranscriptionError):
+                raise  # Re-raise our custom exceptions
+            except Exception as e:
+                raise TranscriptionError(
+                    f"Unexpected error during NeMo transcription: {e}",
+                    engine="nemo",
+                    original_error=e
+                )
             finally:
                 # Clean up temporary file
                 if os.path.exists(tmp_file.name):
