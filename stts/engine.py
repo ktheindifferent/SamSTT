@@ -3,10 +3,13 @@ from io import BytesIO
 from pathlib import Path
 import os
 from typing import Optional, Dict, Any
+import logging
 
 import ffmpeg
 import numpy as np
 from .engine_manager import STTEngineManager
+
+logger = logging.getLogger(__name__)
 
 
 class SpeechToTextEngine:
@@ -118,8 +121,15 @@ class SpeechToTextEngine:
             engine = self.manager.get_engine()
             if hasattr(engine, 'model'):
                 self.model = engine.model
-        except:
-            pass
+        except ValueError as e:
+            # Engine not available or unknown engine
+            logger.debug(f"Could not setup legacy model attribute: {e}")
+        except AttributeError as e:
+            # Engine doesn't have expected attributes
+            logger.debug(f"Engine doesn't have model attribute for legacy support: {e}")
+        except Exception as e:
+            # Catch any other unexpected exceptions during legacy setup
+            logger.debug(f"Unexpected error during legacy support setup: {type(e).__name__}: {e}")
     
     def normalize_audio(self, audio):
         """Normalize audio to 16kHz mono WAV format (legacy method)"""
