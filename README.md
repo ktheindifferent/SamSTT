@@ -194,6 +194,14 @@ export WAV2VEC2_DEVICE=cpu
 # Service configuration
 export MAX_ENGINE_WORKERS=2
 export LOG_LEVEL=INFO
+
+# Security limits (all optional with sensible defaults)
+export MAX_AUDIO_DURATION=600  # Max audio duration in seconds (default: 10 min)
+export MAX_FILE_SIZE=52428800  # Max file size in bytes (default: 50MB)
+export MAX_REQUESTS_PER_MINUTE=60  # Rate limit per minute
+export MAX_REQUESTS_PER_HOUR=600  # Rate limit per hour
+export REQUEST_TIMEOUT=60  # Request timeout in seconds
+export MAX_WAV_EXPANSION_FACTOR=2.0  # Max expansion for WAV conversion
 ```
 
 #### 5. Run the Service

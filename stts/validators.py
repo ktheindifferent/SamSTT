@@ -13,11 +13,14 @@ from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
-# Configuration from environment variables
-MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 50 * 1024 * 1024))  # 50MB default
-MAX_REQUESTS_PER_MINUTE = int(os.getenv('MAX_REQUESTS_PER_MINUTE', 60))
-MAX_REQUESTS_PER_HOUR = int(os.getenv('MAX_REQUESTS_PER_HOUR', 600))
-REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', 60))  # 60 seconds default
+# Import configuration from centralized config module
+from .config import SecurityConfig
+
+# Export for backward compatibility
+MAX_FILE_SIZE = SecurityConfig.MAX_FILE_SIZE
+MAX_REQUESTS_PER_MINUTE = SecurityConfig.MAX_REQUESTS_PER_MINUTE
+MAX_REQUESTS_PER_HOUR = SecurityConfig.MAX_REQUESTS_PER_HOUR
+REQUEST_TIMEOUT = SecurityConfig.REQUEST_TIMEOUT
 
 # Allowed MIME types for audio files
 ALLOWED_MIME_TYPES = {

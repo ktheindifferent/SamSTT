@@ -9,17 +9,19 @@ from sanic.exceptions import InvalidUsage, RequestTimeout
 from .engine import SpeechToTextEngine
 from .validators import (
     SecurityMiddleware, 
-    validate_audio_file, 
-    REQUEST_TIMEOUT,
-    MAX_FILE_SIZE
+    validate_audio_file
 )
+from .config import SecurityConfig
 
 
 # Configure logging
 logging.basicConfig(level=getenv('LOG_LEVEL', 'INFO'))
 logger = logging.getLogger(__name__)
 
-MAX_ENGINE_WORKERS = int(getenv('MAX_ENGINE_WORKERS', 2))
+# Use centralized configuration
+MAX_ENGINE_WORKERS = SecurityConfig.MAX_ENGINE_WORKERS
+REQUEST_TIMEOUT = SecurityConfig.REQUEST_TIMEOUT
+MAX_FILE_SIZE = SecurityConfig.MAX_FILE_SIZE
 
 # Initialize the unified STT engine
 engine = SpeechToTextEngine()
@@ -28,9 +30,9 @@ executor = ThreadPoolExecutor(max_workers=MAX_ENGINE_WORKERS)
 app = Sanic("stt-service")
 
 # Configure request size limit
-app.config.REQUEST_MAX_SIZE = MAX_FILE_SIZE
-app.config.REQUEST_TIMEOUT = REQUEST_TIMEOUT
-app.config.RESPONSE_TIMEOUT = REQUEST_TIMEOUT
+app.config.REQUEST_MAX_SIZE = SecurityConfig.MAX_FILE_SIZE
+app.config.REQUEST_TIMEOUT = SecurityConfig.REQUEST_TIMEOUT
+app.config.RESPONSE_TIMEOUT = SecurityConfig.REQUEST_TIMEOUT
 
 
 @app.route('/api/v1/stt', methods=['POST'])
@@ -202,6 +204,6 @@ if __name__ == '__main__':
     available = engine.list_engines()
     logger.info(f"Starting STT service with {len(available)} available engines: {available}")
     logger.info(f"Default engine: {engine.manager.default_engine_name}")
-    logger.info(f"Security settings: Max file size: {MAX_FILE_SIZE/1024/1024:.1f}MB, Request timeout: {REQUEST_TIMEOUT}s")
+    logger.info(f"Security configuration: {SecurityConfig.get_config_summary()}")
     
     app.run(host='0.0.0.0', port=8000)

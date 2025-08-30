@@ -83,20 +83,38 @@ This document describes the security features implemented in the Unified STT Ser
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MAX_FILE_SIZE` | 52428800 (50MB) | Maximum upload file size in bytes |
-| `MAX_REQUESTS_PER_MINUTE` | 60 | Rate limit per minute per IP |
-| `MAX_REQUESTS_PER_HOUR` | 600 | Rate limit per hour per IP |
-| `REQUEST_TIMEOUT` | 60 | Request processing timeout in seconds |
-| `LOG_LEVEL` | INFO | Logging verbosity |
+| Variable | Default | Description | Valid Range |
+|----------|---------|-------------|-------------|
+| `MAX_AUDIO_DURATION` | 600 (10 min) | Maximum audio duration in seconds | 10 - 3600 |
+| `MAX_FILE_SIZE` | 52428800 (50MB) | Maximum upload file size in bytes | 1024 - 524288000 |
+| `MAX_REQUESTS_PER_MINUTE` | 60 | Rate limit per minute per IP | 1 - 10000 |
+| `MAX_REQUESTS_PER_HOUR` | 600 | Rate limit per hour per IP | 1 - 10000 |
+| `REQUEST_TIMEOUT` | 60 | Request processing timeout in seconds | 1 - 600 |
+| `MAX_ENGINE_WORKERS` | 2 | Max concurrent STT workers | 1 - 100 |
+| `MAX_WAV_EXPANSION_FACTOR` | 2.0 | Max size expansion for WAV conversion | 1.0 - 10.0 |
+| `LOG_LEVEL` | INFO | Logging verbosity | - |
+
+### Configuration Module
+
+All security limits are centralized in `stts/config.py` with automatic validation:
+
+```python
+from stts.config import SecurityConfig
+
+# Access configuration
+max_duration = SecurityConfig.MAX_AUDIO_DURATION
+max_file_size = SecurityConfig.MAX_FILE_SIZE
+
+# Configuration is validated on startup
+# Invalid values are automatically adjusted to safe defaults
+```
 
 ### Sanic Configuration
 
 ```python
-app.config.REQUEST_MAX_SIZE = MAX_FILE_SIZE
-app.config.REQUEST_TIMEOUT = REQUEST_TIMEOUT
-app.config.RESPONSE_TIMEOUT = REQUEST_TIMEOUT
+app.config.REQUEST_MAX_SIZE = SecurityConfig.MAX_FILE_SIZE
+app.config.REQUEST_TIMEOUT = SecurityConfig.REQUEST_TIMEOUT
+app.config.RESPONSE_TIMEOUT = SecurityConfig.REQUEST_TIMEOUT
 ```
 
 ## Testing

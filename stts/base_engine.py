@@ -5,7 +5,8 @@ from io import BytesIO
 import numpy as np
 import ffmpeg
 import logging
-from .validators import sanitize_ffmpeg_input, MAX_FILE_SIZE
+from .validators import sanitize_ffmpeg_input
+from .config import SecurityConfig
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,8 @@ class BaseSTTEngine(ABC):
             raise
         
         # Check size after sanitization
-        if len(sanitized_audio) > MAX_FILE_SIZE:
-            raise ValueError(f"Audio file exceeds maximum size of {MAX_FILE_SIZE/1024/1024:.1f}MB")
+        if len(sanitized_audio) > SecurityConfig.MAX_FILE_SIZE:
+            raise ValueError(f"Audio file exceeds maximum size of {SecurityConfig.MAX_FILE_SIZE/1024/1024:.1f}MB")
         
         try:
             # Use FFmpeg with strict security parameters
@@ -98,7 +99,7 @@ class BaseSTTEngine(ABC):
         if not out:
             raise Exception("Audio normalization produced no output")
         
-        if len(out) > MAX_FILE_SIZE * 2:  # Allow some expansion for WAV format
+        if len(out) > SecurityConfig.MAX_FILE_SIZE * SecurityConfig.MAX_WAV_EXPANSION_FACTOR:
             raise Exception(f"Normalized audio exceeds reasonable size")
         
         # Log any warnings from FFmpeg
@@ -153,11 +154,10 @@ class BaseSTTEngine(ABC):
                 if len(audio_data) == 0:
                     raise ValueError("No audio data after conversion")
                 
-                # Check for reasonable audio length (e.g., max 10 minutes)
-                max_duration = 600  # seconds
+                # Check for reasonable audio length
                 duration = len(audio_data) / framerate
-                if duration > max_duration:
-                    raise ValueError(f"Audio duration {duration:.1f}s exceeds maximum of {max_duration}s")
+                if duration > SecurityConfig.MAX_AUDIO_DURATION:
+                    raise ValueError(f"Audio duration {duration:.1f}s exceeds maximum of {SecurityConfig.MAX_AUDIO_DURATION}s")
                 
                 sample_rate = framerate
         except wave.Error as e:
