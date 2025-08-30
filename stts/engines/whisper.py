@@ -29,6 +29,16 @@ class WhisperEngine(BaseSTTEngine):
                 'fp16': self.config.get('fp16', False),
                 'verbose': self.config.get('verbose', False)
             }
+            
+            # Import librosa once during initialization to avoid memory leaks
+            # from repeated dynamic imports in transcribe_raw
+            try:
+                import librosa
+                self.librosa = librosa
+            except ImportError:
+                # librosa is optional - only needed for resampling
+                self.librosa = None
+                
         except ImportError:
             raise ImportError("Whisper package not installed. Install with: pip install openai-whisper")
         except Exception as e:
@@ -41,8 +51,9 @@ class WhisperEngine(BaseSTTEngine):
         
         # Whisper expects audio at 16kHz
         if sample_rate != 16000:
-            import librosa
-            audio_float = librosa.resample(audio_float, orig_sr=sample_rate, target_sr=16000)
+            if self.librosa is None:
+                raise RuntimeError("librosa not available for resampling. Install with: pip install librosa")
+            audio_float = self.librosa.resample(audio_float, orig_sr=sample_rate, target_sr=16000)
         
         # Transcribe
         result = self.model.transcribe(audio_float, **self.transcribe_options)
