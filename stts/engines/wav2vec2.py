@@ -12,6 +12,7 @@ class Wav2Vec2Engine(BaseSTTEngine):
         try:
             from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor, Wav2Vec2CTCTokenizer
             import torch
+            self.torch = torch  # Store torch reference to avoid repeated imports
             
             # Get model name/path
             model_name = self.config.get('model_name', 'facebook/wav2vec2-base-960h')
@@ -31,10 +32,18 @@ class Wav2Vec2Engine(BaseSTTEngine):
             
             # Move model to device
             if self.device != 'cpu':
-                import torch
                 self.model = self.model.to(torch.device(self.device))
             
             self.model.eval()
+            
+            # Import librosa once during initialization to avoid memory leaks
+            # from repeated dynamic imports in transcribe_raw
+            try:
+                import librosa
+                self.librosa = librosa
+            except ImportError:
+                # librosa is optional - only needed for resampling
+                self.librosa = None
             
         except ImportError as e:
             raise ImportError(f"Required packages not installed: {e}. Install with: pip install transformers torch")
@@ -43,8 +52,6 @@ class Wav2Vec2Engine(BaseSTTEngine):
     
     def transcribe_raw(self, audio_data: np.ndarray, sample_rate: int = 16000) -> str:
         """Transcribe using Wav2Vec2"""
-        import torch
-        
         # Convert to float32 and normalize
         if audio_data.dtype == np.int16:
             audio_float = audio_data.astype(np.float32) / 32768.0
@@ -53,8 +60,9 @@ class Wav2Vec2Engine(BaseSTTEngine):
         
         # Resample if needed (Wav2Vec2 expects 16kHz)
         if sample_rate != 16000:
-            import librosa
-            audio_float = librosa.resample(audio_float, orig_sr=sample_rate, target_sr=16000)
+            if self.librosa is None:
+                raise RuntimeError("librosa not available for resampling. Install with: pip install librosa")
+            audio_float = self.librosa.resample(audio_float, orig_sr=sample_rate, target_sr=16000)
         
         # Process audio
         inputs = self.processor(
@@ -66,12 +74,12 @@ class Wav2Vec2Engine(BaseSTTEngine):
         
         # Move to device if needed
         if self.device != 'cpu':
-            inputs = {k: v.to(torch.device(self.device)) for k, v in inputs.items()}
+            inputs = {k: v.to(self.torch.device(self.device)) for k, v in inputs.items()}
         
         # Generate transcription
-        with torch.no_grad():
+        with self.torch.no_grad():
             logits = self.model(**inputs).logits
-            predicted_ids = torch.argmax(logits, dim=-1)
+            predicted_ids = self.torch.argmax(logits, dim=-1)
             transcription = self.processor.batch_decode(predicted_ids)[0]
         
         return transcription.strip()
