@@ -1,6 +1,8 @@
 from typing import Dict, Any, Optional, List
 import logging
 import threading
+import weakref
+import time
 from pathlib import Path
 from .base_engine import BaseSTTEngine
 from .engines.deepspeech import DeepSpeechEngine
@@ -43,9 +45,17 @@ class STTEngineManager:
         self.config = config or {}
         self.engines: Dict[str, BaseSTTEngine] = {}
         self.default_engine_name = default_engine
-        # Thread-safe initialization locks
+        # Thread-safe initialization locks with automatic cleanup
+        # RESOURCE LEAK FIX: Implements automatic cleanup of unused engine locks to prevent
+        # memory leaks in long-running deployments. The cleanup mechanism uses:
+        # 1. TTL-based cleanup: Locks unused for _lock_cleanup_interval seconds are removed
+        # 2. Weak references: Track lock lifecycle without preventing garbage collection
+        # 3. Thread-safe cleanup: Safe to clean up while other threads are using locks
         self._engine_locks: Dict[str, threading.Lock] = {}
         self._locks_lock = threading.Lock()  # Lock for managing the locks dictionary
+        self._lock_refs: Dict[str, weakref.ref] = {}  # Weak references to track lock usage
+        self._lock_last_used: Dict[str, float] = {}  # Track last usage time for TTL cleanup
+        self._lock_cleanup_interval = 300  # Cleanup locks unused for 5 minutes
         self._initialize_engines()
     
     def _initialize_engines(self):
@@ -88,6 +98,72 @@ class STTEngineManager:
         self.engines[name] = engine
         logger.info(f"Added custom engine: {name}")
     
+    def _cleanup_unused_locks(self):
+        """Clean up locks that haven't been used recently
+        
+        This method implements TTL-based cleanup to prevent the _engine_locks dictionary
+        from growing indefinitely. Locks are removed if:
+        1. They haven't been used for longer than _lock_cleanup_interval seconds
+        2. They are not currently locked (not in use by any thread)
+        
+        This is thread-safe and can be called while other threads are using locks.
+        """
+        current_time = time.time()
+        locks_to_remove = []
+        
+        with self._locks_lock:
+            for engine_name, last_used in list(self._lock_last_used.items()):
+                # Remove locks that haven't been used for the cleanup interval
+                # and are not currently in use (not locked)
+                if current_time - last_used > self._lock_cleanup_interval:
+                    lock = self._engine_locks.get(engine_name)
+                    if lock and not lock.locked():
+                        locks_to_remove.append(engine_name)
+            
+            # Remove identified locks
+            for engine_name in locks_to_remove:
+                if engine_name in self._engine_locks:
+                    del self._engine_locks[engine_name]
+                if engine_name in self._lock_refs:
+                    del self._lock_refs[engine_name]
+                if engine_name in self._lock_last_used:
+                    del self._lock_last_used[engine_name]
+                logger.debug(f"Cleaned up unused lock for engine: {engine_name}")
+        
+        if locks_to_remove:
+            logger.info(f"Cleaned up {len(locks_to_remove)} unused engine locks")
+    
+    def _get_or_create_lock(self, name: str) -> threading.Lock:
+        """Get or create a lock for the given engine name with cleanup tracking
+        
+        This method ensures thread-safe lazy initialization of engines while preventing
+        resource leaks through automatic cleanup. It:
+        1. Creates a new lock if one doesn't exist for the engine
+        2. Updates the last-used timestamp for TTL tracking
+        3. Periodically triggers cleanup to remove stale locks
+        
+        Args:
+            name: Name of the engine to get/create a lock for
+            
+        Returns:
+            Threading lock for the specified engine
+        """
+        with self._locks_lock:
+            if name not in self._engine_locks:
+                lock = threading.Lock()
+                self._engine_locks[name] = lock
+                self._lock_refs[name] = weakref.ref(lock)
+                logger.debug(f"Created new lock for engine: {name}")
+            
+            # Update last used time
+            self._lock_last_used[name] = time.time()
+            
+            # Periodically cleanup unused locks (every 10 engine requests)
+            if len(self._engine_locks) > 10 and len(self._engine_locks) % 10 == 0:
+                self._cleanup_unused_locks()
+            
+            return self._engine_locks[name]
+    
     def get_engine(self, name: Optional[str] = None) -> BaseSTTEngine:
         """Get a specific engine or the default engine with thread-safe initialization
         
@@ -105,11 +181,8 @@ class STTEngineManager:
         
         # Double-checked locking pattern for thread-safe lazy initialization
         if name not in self.engines:
-            # Get or create lock for this specific engine
-            with self._locks_lock:
-                if name not in self._engine_locks:
-                    self._engine_locks[name] = threading.Lock()
-                engine_lock = self._engine_locks[name]
+            # Get or create lock for this specific engine with cleanup tracking
+            engine_lock = self._get_or_create_lock(name)
             
             # Try to initialize on-demand with proper locking
             with engine_lock:
@@ -229,3 +302,35 @@ class STTEngineManager:
                         'config': self.config.get(name, {})
                     }
             return info
+    
+    def get_lock_stats(self) -> Dict[str, Any]:
+        """Get statistics about engine locks (for monitoring/debugging)
+        
+        Provides visibility into the lock cleanup mechanism's state, useful for:
+        - Monitoring lock lifecycle in production
+        - Debugging potential lock leaks
+        - Verifying cleanup is working correctly
+        
+        Returns:
+            Dict with lock statistics including:
+            - total_locks: Number of active locks
+            - locks: Per-engine lock details (locked state, age, weak ref status)
+        """
+        with self._locks_lock:
+            current_time = time.time()
+            stats = {
+                'total_locks': len(self._engine_locks),
+                'locks': {}
+            }
+            
+            for engine_name, lock in self._engine_locks.items():
+                last_used = self._lock_last_used.get(engine_name, 0)
+                age = current_time - last_used if last_used else 0
+                
+                stats['locks'][engine_name] = {
+                    'locked': lock.locked(),
+                    'age_seconds': age,
+                    'weak_ref_alive': self._lock_refs.get(engine_name, lambda: None)() is not None
+                }
+            
+            return stats
