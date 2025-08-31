@@ -51,8 +51,8 @@ class STTEngineManager:
         # 1. TTL-based cleanup: Locks unused for _lock_cleanup_interval seconds are removed
         # 2. Weak references: Track lock lifecycle without preventing garbage collection
         # 3. Thread-safe cleanup: Safe to clean up while other threads are using locks
-        self._engine_locks: Dict[str, threading.Lock] = {}
-        self._locks_lock = threading.Lock()  # Lock for managing the locks dictionary
+        self._engine_locks: Dict[str, threading.RLock] = {}  # Using RLock for nested locking support
+        self._locks_lock = threading.RLock()  # RLock for managing the locks dictionary
         self._lock_refs: Dict[str, weakref.ref] = {}  # Weak references to track lock usage
         self._lock_last_used: Dict[str, float] = {}  # Track last usage time for TTL cleanup
         self._lock_cleanup_interval = 300  # Cleanup locks unused for 5 minutes
@@ -133,7 +133,7 @@ class STTEngineManager:
         if locks_to_remove:
             logger.info(f"Cleaned up {len(locks_to_remove)} unused engine locks")
     
-    def _get_or_create_lock(self, name: str) -> threading.Lock:
+    def _get_or_create_lock(self, name: str) -> threading.RLock:
         """Get or create a lock for the given engine name with cleanup tracking
         
         This method ensures thread-safe lazy initialization of engines while preventing
@@ -150,7 +150,7 @@ class STTEngineManager:
         """
         with self._locks_lock:
             if name not in self._engine_locks:
-                lock = threading.Lock()
+                lock = threading.RLock()
                 self._engine_locks[name] = lock
                 self._lock_refs[name] = weakref.ref(lock)
                 logger.debug(f"Created new lock for engine: {name}")
@@ -167,6 +167,12 @@ class STTEngineManager:
     def get_engine(self, name: Optional[str] = None) -> BaseSTTEngine:
         """Get a specific engine or the default engine with thread-safe initialization
         
+        This implementation uses proper double-checked locking to prevent race conditions
+        during engine initialization. The pattern ensures:
+        1. Fast path for already-initialized engines (no lock needed)
+        2. Thread-safe lazy initialization for new engines
+        3. No duplicate initialization even under high concurrency
+        
         Args:
             name: Name of the engine to get. If None, returns default engine
             
@@ -179,35 +185,45 @@ class STTEngineManager:
         if name is None:
             name = self.default_engine_name
         
-        # Double-checked locking pattern for thread-safe lazy initialization
-        if name not in self.engines:
-            # Get or create lock for this specific engine with cleanup tracking
-            engine_lock = self._get_or_create_lock(name)
-            
-            # Try to initialize on-demand with proper locking
-            with engine_lock:
-                # Double-check after acquiring lock
-                if name not in self.engines:
-                    if name in self.ENGINES:
-                        engine_config = self.config.get(name, {})
-                        logger.info(f"Thread {threading.current_thread().name}: Attempting to initialize {name} engine")
-                        try:
-                            engine = self.ENGINES[name](engine_config)
-                            if engine.is_available:
-                                self.engines[name] = engine
-                                logger.info(f"Thread {threading.current_thread().name}: Successfully initialized {name} engine on-demand")
-                            else:
-                                logger.warning(f"Thread {threading.current_thread().name}: Engine {name} is not available")
-                                raise ValueError(f"Engine {name} is not available")
-                        except Exception as e:
-                            logger.error(f"Thread {threading.current_thread().name}: Failed to initialize engine {name}: {e}")
-                            raise ValueError(f"Failed to initialize engine {name}: {e}")
-                    else:
-                        raise ValueError(f"Unknown engine: {name}")
-                else:
-                    logger.debug(f"Thread {threading.current_thread().name}: Engine {name} already initialized by another thread")
+        # Fast path: Check if engine already exists (volatile read)
+        # Use .get() to avoid KeyError and ensure atomic read
+        engine = self.engines.get(name)
+        if engine is not None:
+            return engine
         
-        return self.engines[name]
+        # Slow path: Engine needs initialization
+        # Get or create lock for this specific engine with cleanup tracking
+        engine_lock = self._get_or_create_lock(name)
+        
+        # Try to initialize on-demand with proper locking
+        with engine_lock:
+            # Double-check after acquiring lock - another thread may have initialized it
+            engine = self.engines.get(name)
+            if engine is not None:
+                logger.debug(f"Thread {threading.current_thread().name}: Engine {name} already initialized by another thread")
+                return engine
+            
+            # Engine definitely doesn't exist, initialize it
+            if name not in self.ENGINES:
+                raise ValueError(f"Unknown engine: {name}")
+            
+            engine_config = self.config.get(name, {})
+            logger.info(f"Thread {threading.current_thread().name}: Attempting to initialize {name} engine")
+            
+            try:
+                engine = self.ENGINES[name](engine_config)
+                if not engine.is_available:
+                    logger.warning(f"Thread {threading.current_thread().name}: Engine {name} is not available")
+                    raise ValueError(f"Engine {name} is not available")
+                
+                # Store the engine atomically
+                self.engines[name] = engine
+                logger.info(f"Thread {threading.current_thread().name}: Successfully initialized {name} engine on-demand")
+                return engine
+                
+            except Exception as e:
+                logger.error(f"Thread {threading.current_thread().name}: Failed to initialize engine {name}: {e}")
+                raise ValueError(f"Failed to initialize engine {name}: {e}")
     
     def list_available_engines(self) -> List[str]:
         """List all available and initialized engines"""
