@@ -1,7 +1,10 @@
 from os import getenv
 import logging
 import asyncio
+import signal
+import time
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from sanic import Sanic
 from sanic.response import json
 from sanic.exceptions import InvalidUsage, RequestTimeout
@@ -20,10 +23,15 @@ logging.basicConfig(level=getenv('LOG_LEVEL', 'INFO'))
 logger = logging.getLogger(__name__)
 
 MAX_ENGINE_WORKERS = int(getenv('MAX_ENGINE_WORKERS', 2))
+SHUTDOWN_TIMEOUT = int(getenv('EXECUTOR_SHUTDOWN_TIMEOUT', 30))
 
 # Initialize the unified STT engine
 engine = SpeechToTextEngine()
-executor = ThreadPoolExecutor(max_workers=MAX_ENGINE_WORKERS)
+
+# Thread pool executor with tracking for graceful shutdown
+executor = ThreadPoolExecutor(max_workers=MAX_ENGINE_WORKERS, thread_name_prefix='stt-worker')
+shutdown_event = Event()
+active_tasks = set()
 
 app = Sanic("stt-service")
 
@@ -60,14 +68,16 @@ async def stt(request):
     inference_start = perf_counter()
     
     try:
-        # Add timeout for transcription
-        result = await asyncio.wait_for(
-            app.loop.run_in_executor(
-                executor, 
-                lambda: engine.transcribe(speech.body, engine=engine_name)
-            ),
-            timeout=REQUEST_TIMEOUT
+        # Add timeout for transcription with task tracking
+        future = app.loop.run_in_executor(
+            executor, 
+            lambda: engine.transcribe(speech.body, engine=engine_name)
         )
+        active_tasks.add(future)
+        try:
+            result = await asyncio.wait_for(future, timeout=REQUEST_TIMEOUT)
+        finally:
+            active_tasks.discard(future)
         inference_end = perf_counter() - inference_start
         
         return json({
@@ -108,14 +118,16 @@ async def stt_with_engine(request, engine_name):
     inference_start = perf_counter()
     
     try:
-        # Add timeout for transcription
-        result = await asyncio.wait_for(
-            app.loop.run_in_executor(
-                executor,
-                lambda: engine.transcribe(speech.body, engine=engine_name)
-            ),
-            timeout=REQUEST_TIMEOUT
+        # Add timeout for transcription with task tracking
+        future = app.loop.run_in_executor(
+            executor,
+            lambda: engine.transcribe(speech.body, engine=engine_name)
         )
+        active_tasks.add(future)
+        try:
+            result = await asyncio.wait_for(future, timeout=REQUEST_TIMEOUT)
+        finally:
+            active_tasks.discard(future)
         inference_end = perf_counter() - inference_start
         
         return json({
@@ -168,12 +180,31 @@ async def get_engine_info(request, engine_name):
 
 @app.route('/health', methods=['GET'])
 async def health(request):
-    """Health check endpoint"""
+    """Health check endpoint with thread pool monitoring"""
     available_engines = engine.list_engines()
+    
+    # Get thread pool status
+    if hasattr(executor, '_threads'):
+        active_threads = len([t for t in executor._threads if t and t.is_alive()])
+        max_threads = executor._max_workers
+    else:
+        active_threads = 0
+        max_threads = MAX_ENGINE_WORKERS
+    
+    # Check if we're shutting down
+    is_shutting_down = shutdown_event.is_set()
+    
     return json({
-        'status': 'healthy' if available_engines else 'degraded',
+        'status': 'shutting_down' if is_shutting_down else ('healthy' if available_engines else 'degraded'),
         'engines_available': len(available_engines),
-        'engines': available_engines
+        'engines': available_engines,
+        'thread_pool': {
+            'active_threads': active_threads,
+            'max_threads': max_threads,
+            'active_tasks': len(active_tasks),
+            'is_shutdown': executor._shutdown,
+            'shutting_down': is_shutting_down
+        }
     })
 
 
@@ -195,13 +226,81 @@ async def security_response_middleware(request, response):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Content-Security-Policy'] = "default-src 'self'"
-    
 
-if __name__ == '__main__':
+
+@app.before_server_start
+async def setup_executor(app, loop):
+    """Initialize resources on server start"""
+    logger.info(f"Initializing ThreadPoolExecutor with {MAX_ENGINE_WORKERS} workers")
+    logger.info(f"Shutdown timeout configured: {SHUTDOWN_TIMEOUT} seconds")
+    
     # Log available engines at startup
     available = engine.list_engines()
     logger.info(f"Starting STT service with {len(available)} available engines: {available}")
     logger.info(f"Default engine: {engine.manager.default_engine_name}")
     logger.info(f"Security settings: Max file size: {MAX_FILE_SIZE/1024/1024:.1f}MB, Request timeout: {REQUEST_TIMEOUT}s")
+
+
+@app.before_server_stop
+async def shutdown_executor(app, loop):
+    """Gracefully shutdown ThreadPoolExecutor before server stops"""
+    logger.info("Initiating graceful shutdown of ThreadPoolExecutor...")
+    shutdown_event.set()
     
+    # Wait for active tasks to complete (with timeout)
+    if active_tasks:
+        logger.info(f"Waiting for {len(active_tasks)} active tasks to complete...")
+        start_time = time.time()
+        
+        while active_tasks and (time.time() - start_time) < SHUTDOWN_TIMEOUT:
+            logger.debug(f"Active tasks remaining: {len(active_tasks)}")
+            await asyncio.sleep(0.5)
+        
+        if active_tasks:
+            logger.warning(f"Timeout: {len(active_tasks)} tasks still active after {SHUTDOWN_TIMEOUT}s")
+            # Cancel remaining tasks
+            for task in list(active_tasks):
+                if not task.done():
+                    task.cancel()
+            active_tasks.clear()
+    
+    # Shutdown the executor
+    logger.info("Shutting down ThreadPoolExecutor...")
+    try:
+        executor.shutdown(wait=True, timeout=SHUTDOWN_TIMEOUT)
+        logger.info("ThreadPoolExecutor shutdown completed successfully")
+    except Exception as e:
+        logger.error(f"Error during executor shutdown: {e}")
+        # Force shutdown if graceful fails
+        executor.shutdown(wait=False)
+        logger.warning("Forced ThreadPoolExecutor shutdown")
+
+
+@app.after_server_stop
+async def cleanup_resources(app, loop):
+    """Final cleanup after server stops"""
+    logger.info("Server stopped, cleanup completed")
+    
+    # Log final statistics if available
+    if hasattr(executor, '_threads'):
+        alive_threads = [t for t in executor._threads if t and t.is_alive()]
+        if alive_threads:
+            logger.warning(f"Warning: {len(alive_threads)} threads still alive after shutdown")
+        else:
+            logger.info("All worker threads terminated successfully")
+
+
+def handle_signal(signum, frame):
+    """Handle shutdown signals gracefully"""
+    sig_name = signal.Signals(signum).name
+    logger.info(f"Received signal {sig_name}, initiating graceful shutdown...")
+    shutdown_event.set()
+
+
+# Register signal handlers for graceful shutdown
+signal.signal(signal.SIGTERM, handle_signal)
+signal.signal(signal.SIGINT, handle_signal)
+    
+
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
