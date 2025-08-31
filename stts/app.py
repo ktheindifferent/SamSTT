@@ -1,6 +1,9 @@
 from os import getenv
 import logging
 import asyncio
+import atexit
+import signal
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from sanic import Sanic
 from sanic.response import json
@@ -20,12 +23,55 @@ logging.basicConfig(level=getenv('LOG_LEVEL', 'INFO'))
 logger = logging.getLogger(__name__)
 
 MAX_ENGINE_WORKERS = int(getenv('MAX_ENGINE_WORKERS', 2))
+SHUTDOWN_TIMEOUT = float(getenv('SHUTDOWN_TIMEOUT', 10.0))
 
 # Initialize the unified STT engine
 engine = SpeechToTextEngine()
 executor = ThreadPoolExecutor(max_workers=MAX_ENGINE_WORKERS)
 
 app = Sanic("stt-service")
+
+# Track shutdown state
+shutdown_initiated = False
+
+
+def shutdown_executor(wait_timeout=SHUTDOWN_TIMEOUT):
+    """Gracefully shutdown the ThreadPoolExecutor."""
+    global shutdown_initiated
+    if shutdown_initiated:
+        logger.debug("Shutdown already initiated, skipping duplicate call")
+        return
+    
+    shutdown_initiated = True
+    logger.info("Initiating ThreadPoolExecutor shutdown...")
+    
+    try:
+        # Shutdown the executor, waiting for pending tasks
+        executor.shutdown(wait=True, cancel_futures=False)
+        logger.info("ThreadPoolExecutor shutdown completed gracefully")
+    except Exception as e:
+        logger.error(f"Error during executor shutdown: {e}")
+        # Force shutdown if graceful shutdown fails
+        try:
+            executor.shutdown(wait=False, cancel_futures=True)
+            logger.warning("ThreadPoolExecutor forced shutdown completed")
+        except Exception as force_error:
+            logger.error(f"Force shutdown also failed: {force_error}")
+
+
+def signal_handler(signum, frame):
+    """Handle termination signals gracefully."""
+    logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+    shutdown_executor()
+    if app.is_running:
+        app.stop()
+    sys.exit(0)
+
+
+# Register shutdown handlers
+atexit.register(shutdown_executor)
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Configure request size limit
 app.config.REQUEST_MAX_SIZE = MAX_FILE_SIZE
@@ -195,6 +241,51 @@ async def security_response_middleware(request, response):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Content-Security-Policy'] = "default-src 'self'"
+
+
+@app.listener('before_server_start')
+async def setup_app(app, loop):
+    """Initialize application resources before server starts."""
+    logger.info("Setting up application resources...")
+    app.ctx.executor = executor
+    app.ctx.engine = engine
+    logger.info(f"ThreadPoolExecutor initialized with {MAX_ENGINE_WORKERS} workers")
+
+
+@app.listener('after_server_stop')
+async def cleanup_app(app, loop):
+    """Clean up application resources after server stops."""
+    logger.info("Cleaning up application resources...")
+    
+    # Wait for any pending tasks in the event loop
+    pending = asyncio.all_tasks(loop)
+    if pending:
+        logger.info(f"Waiting for {len(pending)} pending tasks to complete...")
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*pending, return_exceptions=True),
+                timeout=SHUTDOWN_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout waiting for pending tasks after {SHUTDOWN_TIMEOUT}s")
+            for task in pending:
+                task.cancel()
+    
+    # Shutdown the executor if not already done
+    if not shutdown_initiated:
+        shutdown_executor()
+    
+    # Clean up engine resources
+    if hasattr(app.ctx, 'engine'):
+        try:
+            # Cleanup any engine resources
+            if hasattr(app.ctx.engine, 'cleanup'):
+                app.ctx.engine.cleanup()
+            logger.info("Engine resources cleaned up")
+        except Exception as e:
+            logger.error(f"Error cleaning up engine resources: {e}")
+    
+    logger.info("Application cleanup completed")
     
 
 if __name__ == '__main__':
