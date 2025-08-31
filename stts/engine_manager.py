@@ -5,15 +5,52 @@ import weakref
 import time
 from pathlib import Path
 from .base_engine import BaseSTTEngine
-from .engines.deepspeech import DeepSpeechEngine
-from .engines.whisper import WhisperEngine
-from .engines.coqui import CoquiEngine
-from .engines.vosk import VoskEngine
-from .engines.silero import SileroEngine
-from .engines.wav2vec2 import Wav2Vec2Engine
-from .engines.speechbrain import SpeechBrainEngine
-from .engines.nemo import NeMoEngine
-from .engines.pocketsphinx import PocketSphinxEngine
+
+# Import engines with optional dependencies
+try:
+    from .engines.deepspeech import DeepSpeechEngine
+except ImportError:
+    DeepSpeechEngine = None
+
+try:
+    from .engines.whisper import WhisperEngine
+except ImportError:
+    WhisperEngine = None
+
+try:
+    from .engines.coqui import CoquiEngine
+except ImportError:
+    CoquiEngine = None
+
+try:
+    from .engines.vosk import VoskEngine
+except ImportError:
+    VoskEngine = None
+
+try:
+    from .engines.silero import SileroEngine
+except ImportError:
+    SileroEngine = None
+
+try:
+    from .engines.wav2vec2 import Wav2Vec2Engine
+except ImportError:
+    Wav2Vec2Engine = None
+
+try:
+    from .engines.speechbrain import SpeechBrainEngine
+except ImportError:
+    SpeechBrainEngine = None
+
+try:
+    from .engines.nemo import NeMoEngine
+except ImportError:
+    NeMoEngine = None
+
+try:
+    from .engines.pocketsphinx import PocketSphinxEngine
+except ImportError:
+    PocketSphinxEngine = None
 
 
 logger = logging.getLogger(__name__)
@@ -22,18 +59,28 @@ logger = logging.getLogger(__name__)
 class STTEngineManager:
     """Manager for multiple STT engine backends"""
     
-    # Registry of available engines
-    ENGINES = {
-        'deepspeech': DeepSpeechEngine,
-        'whisper': WhisperEngine,
-        'coqui': CoquiEngine,
-        'vosk': VoskEngine,
-        'silero': SileroEngine,
-        'wav2vec2': Wav2Vec2Engine,
-        'speechbrain': SpeechBrainEngine,
-        'nemo': NeMoEngine,
-        'pocketsphinx': PocketSphinxEngine
-    }
+    # Registry of available engines (only include if imported successfully)
+    ENGINES = {}
+    
+    # Populate engines that were successfully imported
+    if DeepSpeechEngine:
+        ENGINES['deepspeech'] = DeepSpeechEngine
+    if WhisperEngine:
+        ENGINES['whisper'] = WhisperEngine
+    if CoquiEngine:
+        ENGINES['coqui'] = CoquiEngine
+    if VoskEngine:
+        ENGINES['vosk'] = VoskEngine
+    if SileroEngine:
+        ENGINES['silero'] = SileroEngine
+    if Wav2Vec2Engine:
+        ENGINES['wav2vec2'] = Wav2Vec2Engine
+    if SpeechBrainEngine:
+        ENGINES['speechbrain'] = SpeechBrainEngine
+    if NeMoEngine:
+        ENGINES['nemo'] = NeMoEngine
+    if PocketSphinxEngine:
+        ENGINES['pocketsphinx'] = PocketSphinxEngine
     
     def __init__(self, default_engine: str = 'whisper', config: Optional[Dict[str, Any]] = None):
         """Initialize the STT Engine Manager
