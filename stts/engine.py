@@ -8,6 +8,7 @@ import logging
 import ffmpeg
 import numpy as np
 from .engine_manager import STTEngineManager
+from .config_manager import get_config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -23,96 +24,26 @@ class SpeechToTextEngine:
             config: Configuration for the engines
             config_file: Path to JSON configuration file
         """
-        # Get engine preference from environment if not specified
-        if engine_name is None:
-            engine_name = os.getenv('STT_ENGINE', 'deepspeech')
+        # Use ConfigManager for proper file handle management
+        config_manager = get_config_manager()
         
-        # Load configuration
-        if config is None:
-            if config_file and Path(config_file).exists():
-                import json
-                with open(config_file, 'r') as f:
-                    config = json.load(f)
-                # Override default engine if specified in config
-                if 'default_engine' in config:
-                    engine_name = config.pop('default_engine')
-            else:
-                # Check for default config file locations
-                default_config_paths = [
-                    Path('/app/config.json'),
-                    Path('./config.json'),
-                    Path(os.getenv('STT_CONFIG_FILE', ''))
-                ]
-                for config_path in default_config_paths:
-                    if config_path and config_path.exists():
-                        import json
-                        with open(config_path, 'r') as f:
-                            config = json.load(f)
-                        if 'default_engine' in config:
-                            engine_name = config.pop('default_engine')
-                        break
-                else:
-                    config = self._build_default_config()
+        # Load configuration with proper resource management
+        loaded_config, engine_name = config_manager.load_config(
+            config=config,
+            config_file=config_file,
+            default_engine=engine_name
+        )
+        
+        # If no config was loaded, build default from environment
+        if not loaded_config:
+            loaded_config = config_manager.build_default_config()
         
         # Initialize the engine manager
-        self.manager = STTEngineManager(default_engine=engine_name, config=config)
+        self.manager = STTEngineManager(default_engine=engine_name, config=loaded_config)
         
         # For backward compatibility, check if old model exists
         self._setup_legacy_support()
     
-    def _build_default_config(self) -> Dict[str, Any]:
-        """Build default configuration from environment and file paths"""
-        config = {}
-        
-        # DeepSpeech configuration
-        deepspeech_model_paths = [
-            Path(__file__).parents[1].joinpath('model.tflite'),
-            Path(__file__).parents[1].joinpath('model.pbmm'),
-            Path('/app/model.pbmm'),
-            Path('/app/model.tflite')
-        ]
-        for path in deepspeech_model_paths:
-            if path.exists():
-                config['deepspeech'] = {'model_path': str(path.absolute())}
-                break
-        
-        # Whisper configuration
-        config['whisper'] = {
-            'model_size': os.getenv('WHISPER_MODEL_SIZE', 'base'),
-            'device': os.getenv('WHISPER_DEVICE', 'cpu'),
-            'language': os.getenv('WHISPER_LANGUAGE', None)
-        }
-        
-        # Coqui configuration
-        coqui_model_paths = [
-            Path(__file__).parents[1].joinpath('coqui_model.tflite'),
-            Path(__file__).parents[1].joinpath('coqui_model.pbmm'),
-            Path('/app/coqui_model.tflite'),
-            Path('/app/coqui_model.pbmm')
-        ]
-        for path in coqui_model_paths:
-            if path.exists():
-                config['coqui'] = {'model_path': str(path.absolute())}
-                break
-        
-        # Vosk configuration
-        vosk_model_path = os.getenv('VOSK_MODEL_PATH')
-        if vosk_model_path:
-            config['vosk'] = {'model_path': vosk_model_path}
-        
-        # Silero configuration
-        config['silero'] = {
-            'language': os.getenv('SILERO_LANGUAGE', 'en'),
-            'device': os.getenv('SILERO_DEVICE', 'cpu')
-        }
-        
-        # Wav2Vec2 configuration
-        config['wav2vec2'] = {
-            'model_name': os.getenv('WAV2VEC2_MODEL', 'facebook/wav2vec2-base-960h'),
-            'device': os.getenv('WAV2VEC2_DEVICE', 'cpu')
-        }
-        
-        return config
     
     def _setup_legacy_support(self):
         """Setup support for legacy code expecting 'model' attribute"""
