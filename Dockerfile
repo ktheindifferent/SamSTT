@@ -1,6 +1,8 @@
 FROM python:3.9 as build
 
-RUN echo "1.0.0"
+# Cache bust to ensure fresh builds
+ARG CACHEBUST=1
+RUN echo "Cache bust: ${CACHEBUST}"
 
 RUN pip install -U pip virtualenv \
  && virtualenv -p `which python3` /venv/
@@ -13,13 +15,15 @@ RUN pip install -r /requirements.pip
 # Install optional STT engines based on build args
 ARG INSTALL_WHISPER=false
 ARG INSTALL_VOSK=false
-ARG INSTALL_COQUI=false
+ARG INSTALL_COQUI=true
 ARG INSTALL_SILERO=false
 ARG INSTALL_WAV2VEC2=false
+ARG DOWNLOAD_COQUI_MODEL=false
 
+# Install Coqui by default or when explicitly requested
+RUN if [ "$INSTALL_COQUI" = "true" ] || [ "$DOWNLOAD_COQUI_MODEL" = "true" ]; then pip install STT; fi
 RUN if [ "$INSTALL_WHISPER" = "true" ]; then pip install openai-whisper; fi
 RUN if [ "$INSTALL_VOSK" = "true" ]; then pip install vosk; fi
-RUN if [ "$INSTALL_COQUI" = "true" ]; then pip install STT; fi
 RUN if [ "$INSTALL_SILERO" = "true" ]; then pip install torch torchaudio omegaconf; fi
 RUN if [ "$INSTALL_WAV2VEC2" = "true" ]; then pip install transformers torch librosa; fi
 
@@ -33,7 +37,7 @@ RUN mkdir /app
 
 # Download default models (optional - can be mounted as volumes instead)
 ARG DOWNLOAD_DEEPSPEECH_MODEL=false
-ARG DOWNLOAD_COQUI_MODEL=false
+ARG DOWNLOAD_COQUI_MODEL=true
 ARG DOWNLOAD_VOSK_MODEL=false
 
 # DeepSpeech model

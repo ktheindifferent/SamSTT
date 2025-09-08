@@ -16,6 +16,8 @@
 3. **Configure Docker Build Arguments**
    - In "App Configs" → "Build Arguments", add:
    ```
+   CACHEBUST=1
+   INSTALL_COQUI=true
    DOWNLOAD_COQUI_MODEL=true
    ```
    - For additional engines, add their install flags:

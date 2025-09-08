@@ -276,7 +276,7 @@ async def shutdown_executor(app, loop):
         logger.warning("Forced ThreadPoolExecutor shutdown")
 
 
-@app.after_server_stop
+@app.listener('after_server_stop')
 async def cleanup_resources(app, loop):
     """Final cleanup after server stops"""
     logger.info("Server stopped, cleanup completed")
