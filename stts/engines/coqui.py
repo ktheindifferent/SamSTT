@@ -10,14 +10,21 @@ class CoquiEngine(BaseSTTEngine):
     def initialize(self):
         """Initialize Coqui STT model"""
         try:
-            from STT import Model
+            # Try importing from STT first (official Coqui package)
+            try:
+                from STT import Model
+            except ImportError:
+                # Fall back to stt package (DeepSpeech/Coqui fork)
+                from stt import Model
             
             model_path = self.config.get('model_path')
             if not model_path:
-                # Try default paths for Coqui models
+                # Try default paths for Coqui/DeepSpeech models
                 default_paths = [
-                    Path(__file__).parents[2] / 'coqui_model.tflite',
-                    Path(__file__).parents[2] / 'coqui_model.pbmm',
+                    Path('/app/model.tflite'),  # Primary location
+                    Path('/app/model.pbmm'),
+                    Path(__file__).parents[2] / 'model.tflite',
+                    Path(__file__).parents[2] / 'model.pbmm',
                     Path('/app/coqui_model.tflite'),
                     Path('/app/coqui_model.pbmm')
                 ]
@@ -48,7 +55,7 @@ class CoquiEngine(BaseSTTEngine):
                     self.model.setScorerAlphaBeta(lm_alpha, lm_beta)
                     
         except ImportError:
-            raise ImportError("Coqui STT package not installed. Install with: pip install STT")
+            raise ImportError("Coqui STT package not installed. Install with: pip install STT or pip install stt")
         except Exception as e:
             raise Exception(f"Failed to initialize Coqui STT: {e}")
     
@@ -62,15 +69,21 @@ class CoquiEngine(BaseSTTEngine):
     def _check_availability(self) -> bool:
         """Check if Coqui STT is available"""
         try:
-            import STT
+            # Try importing from either package
+            try:
+                import STT
+            except ImportError:
+                import stt
             # Check if model exists
             model_path = self.config.get('model_path')
             if model_path:
                 return Path(model_path).exists()
             # Check default locations
             default_paths = [
-                Path(__file__).parents[2] / 'coqui_model.tflite',
-                Path(__file__).parents[2] / 'coqui_model.pbmm',
+                Path('/app/model.tflite'),
+                Path('/app/model.pbmm'),
+                Path(__file__).parents[2] / 'model.tflite',
+                Path(__file__).parents[2] / 'model.pbmm',
                 Path('/app/coqui_model.tflite'),
                 Path('/app/coqui_model.pbmm')
             ]

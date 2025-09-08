@@ -29,7 +29,7 @@
 4. **Set Environment Variables**
    - In "App Configs" → "Environmental Variables", add:
    ```
-   STT_ENGINE=deepspeech
+   STT_ENGINE=coqui
    MAX_ENGINE_WORKERS=2
    LOG_LEVEL=INFO
    ```
@@ -43,7 +43,8 @@
 ### Basic Setup (Coqui STT - DeepSpeech successor)
 **Build Args:**
 ```
-DOWNLOAD_COQUI_MODEL=true
+CACHEBUST=3
+DOWNLOAD_DEEPSPEECH_MODEL=true
 ```
 **Environment:**
 ```
