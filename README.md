@@ -8,6 +8,7 @@ A unified Speech-to-Text REST API service supporting multiple offline STT engine
 - **Automatic Fallback**: Falls back to other engines if primary fails
 - **Engine Selection**: Choose engine per request or use default
 - **API Compatible**: Maintains compatibility with common STT API patterns
+- **Automatic Benchmarking**: Identifies fastest engine for your hardware
 
 ## Supported STT Engines
 

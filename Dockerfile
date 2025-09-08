@@ -1,7 +1,7 @@
 FROM python:3.9 as build
 
 # Cache bust to ensure fresh builds
-ARG CACHEBUST=9
+ARG CACHEBUST=10
 RUN echo "Cache bust: ${CACHEBUST}"
 
 RUN pip install -U pip virtualenv \
@@ -21,6 +21,9 @@ RUN pip install -r /requirements.pip
 
 # Install optional STT engines based on build args
 ARG INSTALL_ALL=false
+
+# Re-declare INSTALL_ALL after FROM for use in runtime stage
+ARG INSTALL_ALL
 ARG INSTALL_WHISPER=false
 ARG INSTALL_VOSK=false
 ARG INSTALL_COQUI=false
@@ -59,9 +62,10 @@ RUN mkdir /app
 # Download default models (optional - can be mounted as volumes instead)
 ARG DOWNLOAD_COQUI_MODEL=true
 ARG DOWNLOAD_VOSK_MODEL=false
+ARG DOWNLOAD_WHISPER_MODELS=false
 
 # Download Coqui STT model
-RUN if [ "$DOWNLOAD_COQUI_MODEL" = "true" ]; then \
+RUN if [ "$DOWNLOAD_COQUI_MODEL" = "true" ] || [ "$INSTALL_ALL" = "true" ]; then \
     wget --progress=dot:giga --tries=3 --timeout=30 \
     https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocab/model.tflite \
     -O /app/model.tflite || \
@@ -69,7 +73,8 @@ RUN if [ "$DOWNLOAD_COQUI_MODEL" = "true" ]; then \
     fi
 
 # Vosk model
-RUN if [ "$DOWNLOAD_VOSK_MODEL" = "true" ]; then \
+RUN if [ "$DOWNLOAD_VOSK_MODEL" = "true" ] || [ "$INSTALL_ALL" = "true" ]; then \
+    echo "Downloading Vosk model..." && \
     wget --progress=dot:giga --tries=3 --timeout=30 \
     https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip \
     -O /tmp/vosk-model.zip && \
@@ -77,6 +82,21 @@ RUN if [ "$DOWNLOAD_VOSK_MODEL" = "true" ]; then \
     mv /app/vosk-model-small-en-us-0.15 /app/vosk_model && \
     rm /tmp/vosk-model.zip || \
     echo "Warning: Failed to download Vosk model"; \
+    fi
+
+# Download multiple Whisper models for whisper.cpp
+# Note: We download the models directly from HuggingFace since pywhispercpp might not be installed yet
+RUN if [ "$DOWNLOAD_WHISPER_MODELS" = "true" ] || [ "$INSTALL_ALL" = "true" ]; then \
+    echo "Pre-downloading Whisper models..." && \
+    mkdir -p /app/models/whisper && \
+    cd /app/models/whisper && \
+    for model in tiny base small medium large-v3; do \
+        echo "Downloading ggml-$model.bin..." && \
+        wget --progress=dot:giga --tries=2 --timeout=60 \
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$model.bin" \
+        -O "ggml-$model.bin" || \
+        echo "Warning: Failed to download $model"; \
+    done || echo "Some Whisper models may have failed to download"; \
     fi
 
 # Create app user and directories with proper permissions
@@ -108,6 +128,8 @@ ENV LOG_LEVEL=INFO
 ENV WHISPER_MODEL_SIZE=base
 ENV WHISPER_DEVICE=cpu
 ENV RUN_BENCHMARK_ON_STARTUP=true
+ENV VOSK_MODEL_PATH=/app/vosk_model
+ENV SILERO_LANGUAGE=en
 
 EXPOSE 8000
 

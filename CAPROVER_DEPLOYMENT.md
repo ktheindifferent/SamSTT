@@ -16,15 +16,17 @@
 3. **Configure Docker Build Arguments**
    - In "App Configs" → "Build Arguments", add:
    ```
-   CACHEBUST=9
+   CACHEBUST=10
    DOWNLOAD_COQUI_MODEL=true
    ```
-   - To install ALL engines for benchmarking:
+   - To install ALL engines with ALL models (complete setup):
    ```
    INSTALL_ALL=true
-   DOWNLOAD_COQUI_MODEL=true
-   DOWNLOAD_VOSK_MODEL=true
    ```
+   Note: INSTALL_ALL now automatically downloads:
+   - Coqui model
+   - Vosk model
+   - Whisper models (tiny, base, small, medium, large-v3)
    - Or install specific engines:
    ```
    INSTALL_WHISPER=true
@@ -39,6 +41,7 @@
    MAX_ENGINE_WORKERS=2
    LOG_LEVEL=INFO
    RUN_BENCHMARK_ON_STARTUP=true
+   WHISPER_MODEL_SIZE=base  # Options: tiny, base, small, medium, large-v3
    ```
 
 5. **Deploy**
@@ -63,17 +66,40 @@ The service can automatically benchmark all available engines on startup to dete
 
 **Typical Performance Results:**
 Based on testing with INSTALL_ALL=true:
-- **Wav2Vec2**: ~0.1s (fastest)
-- **Silero**: ~0.14s
+- **Wav2Vec2**: ~0.15s (fastest)
+- **Silero**: ~0.18s
 - **Coqui**: ~1.5s
-- **Whisper.cpp**: ~0.5-2s (depends on model size)
+- **Whisper.cpp**: ~2s (base model)
+
+**Engines with INSTALL_ALL=true:**
+- ✅ **Working with models**: Coqui, Whisper.cpp (all sizes), Vosk, Silero, Wav2Vec2
+- ❌ **Complex Dependencies**: SpeechBrain, NeMo, PocketSphinx (skipped)
 
 ## Recommended Configurations
+
+### Complete Setup (All Engines + All Models)
+**Build Args:**
+```
+CACHEBUST=10
+INSTALL_ALL=true
+```
+**Environment:**
+```
+STT_ENGINE=wav2vec2  # Or let benchmark choose fastest
+WHISPER_MODEL_SIZE=base  # Choose: tiny, base, small, medium, large-v3
+MAX_ENGINE_WORKERS=4
+RUN_BENCHMARK_ON_STARTUP=true
+```
+**What you get:**
+- 5 working STT engines
+- All Whisper model sizes available
+- Automatic benchmark to find fastest
+- ~2GB Docker image with all models
 
 ### Basic Setup (Coqui STT)
 **Build Args:**
 ```
-CACHEBUST=9
+CACHEBUST=10
 DOWNLOAD_COQUI_MODEL=true
 ```
 **Environment:**
