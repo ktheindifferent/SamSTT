@@ -16,6 +16,7 @@ from .validators import (
     REQUEST_TIMEOUT,
     MAX_FILE_SIZE
 )
+from .benchmark import STTBenchmark
 
 
 # Configure logging
@@ -27,6 +28,10 @@ SHUTDOWN_TIMEOUT = int(getenv('EXECUTOR_SHUTDOWN_TIMEOUT', 30))
 
 # Initialize the unified STT engine
 engine = SpeechToTextEngine()
+
+# Initialize benchmark system
+benchmark = STTBenchmark(engine.manager)
+RUN_BENCHMARK_ON_STARTUP = getenv('RUN_BENCHMARK_ON_STARTUP', 'true').lower() == 'true'
 
 # Thread pool executor with tracking for graceful shutdown
 executor = ThreadPoolExecutor(max_workers=MAX_ENGINE_WORKERS, thread_name_prefix='stt-worker')
@@ -154,12 +159,21 @@ async def list_engines(request):
         all_engines = engine.manager.list_all_engines()
         engine_info = engine.get_engine_info()
         
-        return json({
+        response_data = {
             'available': available,
             'all': all_engines,
             'default': engine.manager.default_engine_name,
             'details': engine_info
-        })
+        }
+        
+        # Add benchmark results if available
+        if benchmark.results:
+            response_data['benchmark'] = {
+                'fastest_engine': benchmark.get_fastest_engine(),
+                'results': benchmark.results
+            }
+        
+        return json(response_data)
     except Exception as e:
         logger.error(f"Failed to list engines: {e}")
         raise InvalidUsage(f"Failed to list engines: {str(e)}")
@@ -176,6 +190,37 @@ async def get_engine_info(request, engine_name):
     except Exception as e:
         logger.error(f"Failed to get engine info: {e}")
         raise InvalidUsage(f"Failed to get engine info: {str(e)}")
+
+
+@app.route('/api/v1/benchmark', methods=['POST'])
+async def run_benchmark(request):
+    """Run benchmark on demand"""
+    try:
+        # Get engines to benchmark from request or use all available
+        engines = None
+        if request.json and 'engines' in request.json:
+            engines = request.json['engines']
+        
+        # Run benchmark asynchronously
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(executor, benchmark.run_benchmarks, engines)
+        
+        return json(results)
+    except Exception as e:
+        logger.error(f"Benchmark failed: {e}")
+        raise InvalidUsage(f"Benchmark failed: {str(e)}")
+
+
+@app.route('/api/v1/benchmark', methods=['GET'])
+async def get_benchmark_results(request):
+    """Get the latest benchmark results"""
+    if not benchmark.results:
+        return json({'message': 'No benchmark results available. Run POST /api/v1/benchmark to generate.'})
+    
+    return json({
+        'fastest_engine': benchmark.get_fastest_engine(),
+        'results': benchmark.results
+    })
 
 
 @app.route('/health', methods=['GET'])
@@ -239,6 +284,15 @@ async def setup_executor(app, loop):
     logger.info(f"Starting STT service with {len(available)} available engines: {available}")
     logger.info(f"Default engine: {engine.manager.default_engine_name}")
     logger.info(f"Security settings: Max file size: {MAX_FILE_SIZE/1024/1024:.1f}MB, Request timeout: {REQUEST_TIMEOUT}s")
+    
+    # Run benchmarks if enabled
+    if RUN_BENCHMARK_ON_STARTUP and available:
+        logger.info("Running startup benchmarks...")
+        try:
+            # Run benchmark in executor to avoid blocking startup
+            loop.run_in_executor(executor, benchmark.run_benchmarks, available[:5])  # Limit to first 5 engines
+        except Exception as e:
+            logger.error(f"Failed to start benchmark: {e}")
 
 
 @app.listener('before_server_stop')

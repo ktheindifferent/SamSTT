@@ -1,7 +1,7 @@
 FROM python:3.9 as build
 
 # Cache bust to ensure fresh builds
-ARG CACHEBUST=3
+ARG CACHEBUST=4
 RUN echo "Cache bust: ${CACHEBUST}"
 
 RUN pip install -U pip virtualenv \
@@ -13,18 +13,32 @@ ADD ./requirements.pip /requirements.pip
 RUN pip install -r /requirements.pip
 
 # Install optional STT engines based on build args
+ARG INSTALL_ALL=false
 ARG INSTALL_WHISPER=false
 ARG INSTALL_VOSK=false
 ARG INSTALL_COQUI=false
 ARG INSTALL_SILERO=false
 ARG INSTALL_WAV2VEC2=false
+ARG INSTALL_SPEECHBRAIN=false
+ARG INSTALL_NEMO=false
+ARG INSTALL_POCKETSPHINX=false
 
 # Note: stt package (DeepSpeech/Coqui fork) is installed from requirements.pip
 # Don't install STT package as it conflicts with stt
-RUN if [ "$INSTALL_WHISPER" = "true" ]; then pip install openai-whisper; fi
-RUN if [ "$INSTALL_VOSK" = "true" ]; then pip install vosk; fi
-RUN if [ "$INSTALL_SILERO" = "true" ]; then pip install torch torchaudio omegaconf; fi
-RUN if [ "$INSTALL_WAV2VEC2" = "true" ]; then pip install transformers torch librosa; fi
+
+# Install all engines if INSTALL_ALL is true
+RUN if [ "$INSTALL_ALL" = "true" ]; then \
+    pip install openai-whisper vosk torch torchaudio omegaconf transformers librosa pocketsphinx speechbrain nemo_toolkit[asr]; \
+    fi
+
+# Install individual engines if not installing all
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_WHISPER" = "true" ]; then pip install openai-whisper; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_VOSK" = "true" ]; then pip install vosk; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_SILERO" = "true" ]; then pip install torch torchaudio omegaconf; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_WAV2VEC2" = "true" ]; then pip install transformers torch librosa; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_SPEECHBRAIN" = "true" ]; then pip install speechbrain; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_NEMO" = "true" ]; then pip install nemo_toolkit[asr]; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_POCKETSPHINX" = "true" ]; then pip install pocketsphinx; fi
 
 FROM python:3.9
 
@@ -73,6 +87,7 @@ ENV MAX_ENGINE_WORKERS=2
 ENV LOG_LEVEL=INFO
 ENV WHISPER_MODEL_SIZE=base
 ENV WHISPER_DEVICE=cpu
+ENV RUN_BENCHMARK_ON_STARTUP=true
 
 EXPOSE 8000
 

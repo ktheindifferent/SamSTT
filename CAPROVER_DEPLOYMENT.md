@@ -16,10 +16,16 @@
 3. **Configure Docker Build Arguments**
    - In "App Configs" → "Build Arguments", add:
    ```
-   CACHEBUST=2
+   CACHEBUST=4
    DOWNLOAD_DEEPSPEECH_MODEL=true
    ```
-   - For additional engines, add their install flags:
+   - To install ALL engines for benchmarking:
+   ```
+   INSTALL_ALL=true
+   DOWNLOAD_DEEPSPEECH_MODEL=true
+   DOWNLOAD_VOSK_MODEL=true
+   ```
+   - Or install specific engines:
    ```
    INSTALL_WHISPER=true
    INSTALL_VOSK=true
@@ -32,18 +38,35 @@
    STT_ENGINE=coqui
    MAX_ENGINE_WORKERS=2
    LOG_LEVEL=INFO
+   RUN_BENCHMARK_ON_STARTUP=true
    ```
 
 5. **Deploy**
    - Click "Deploy Now"
    - Wait for the build to complete
 
+## Benchmark Feature
+
+The service can automatically benchmark all available engines on startup to determine which is fastest on your hardware. This helps optimize performance by identifying the best engine for your specific deployment.
+
+**Enable Benchmarking:**
+- Set `RUN_BENCHMARK_ON_STARTUP=true` in environment variables
+- Results appear in `/api/v1/engines` response
+- Run manual benchmarks with `POST /api/v1/benchmark`
+- View results with `GET /api/v1/benchmark`
+
+**Benchmark Results Include:**
+- Initialization time per engine
+- Average transcription time (3 runs)
+- Fastest engine identification
+- Success/failure status
+
 ## Recommended Configurations
 
 ### Basic Setup (Coqui STT - DeepSpeech successor)
 **Build Args:**
 ```
-CACHEBUST=3
+CACHEBUST=4
 DOWNLOAD_DEEPSPEECH_MODEL=true
 ```
 **Environment:**
@@ -155,8 +178,14 @@ APP_URL="https://stt-service.your-domain.com"
 # Test health
 curl $APP_URL/health
 
-# List available engines
+# List available engines (includes benchmark results if run)
 curl $APP_URL/api/v1/engines
+
+# Run benchmark on all available engines
+curl -X POST $APP_URL/api/v1/benchmark
+
+# Get latest benchmark results
+curl $APP_URL/api/v1/benchmark
 
 # Test transcription
 curl -X POST $APP_URL/api/v1/stt \
