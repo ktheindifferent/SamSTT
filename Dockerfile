@@ -38,22 +38,29 @@ ARG DOWNLOAD_VOSK_MODEL=false
 
 # DeepSpeech model
 RUN if [ "$DOWNLOAD_DEEPSPEECH_MODEL" = "true" ]; then \
-    wget https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.pbmm -O /app/model.pbmm; \
+    wget --progress=dot:giga --tries=3 --timeout=30 \
+    https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.pbmm \
+    -O /app/model.pbmm || \
+    echo "Warning: Failed to download DeepSpeech model"; \
     fi
 
-# Coqui model (using the existing URL from original Dockerfile)
+# Coqui model - always download to model.tflite for backward compatibility
 RUN if [ "$DOWNLOAD_COQUI_MODEL" = "true" ]; then \
-    wget https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocab/model.tflite -O /app/coqui_model.tflite; \
-    else \
-    wget https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocab/model.tflite -O /app/model.tflite; \
+    wget --progress=dot:giga --tries=3 --timeout=30 \
+    https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocab/model.tflite \
+    -O /app/model.tflite || \
+    echo "Warning: Failed to download Coqui model"; \
     fi
 
 # Vosk model
 RUN if [ "$DOWNLOAD_VOSK_MODEL" = "true" ]; then \
-    wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip -O /tmp/vosk-model.zip && \
-    unzip /tmp/vosk-model.zip -d /app/ && \
+    wget --progress=dot:giga --tries=3 --timeout=30 \
+    https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip \
+    -O /tmp/vosk-model.zip && \
+    unzip -q /tmp/vosk-model.zip -d /app/ && \
     mv /app/vosk-model-small-en-us-0.15 /app/vosk_model && \
-    rm /tmp/vosk-model.zip; \
+    rm /tmp/vosk-model.zip || \
+    echo "Warning: Failed to download Vosk model"; \
     fi
 
 RUN groupadd --gid=1000 app \
@@ -74,5 +81,9 @@ ENV WHISPER_MODEL_SIZE=base
 ENV WHISPER_DEVICE=cpu
 
 EXPOSE 8000
+
+# Health check for CapRover
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()" || exit 1
 
 CMD python -m stts.app
