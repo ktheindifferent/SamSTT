@@ -4,11 +4,11 @@ sanic==20.9.1
 numpy<2.0.0  # Pin to NumPy 1.x for DeepSpeech compatibility
 
 # STT Engines (install the ones you need)
-# Mozilla DeepSpeech (legacy - has NumPy compatibility issues)
-# stt
+# Mozilla DeepSpeech (using stt package which is actually Coqui STT fork)
+stt
 
-# Coqui STT (successor to DeepSpeech - recommended default)
-STT
+# Coqui STT (official package name STT - conflicts with stt)
+# STT
 
 # OpenAI Whisper
 # openai-whisper

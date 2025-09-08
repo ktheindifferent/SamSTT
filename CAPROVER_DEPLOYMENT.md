@@ -16,9 +16,8 @@
 3. **Configure Docker Build Arguments**
    - In "App Configs" → "Build Arguments", add:
    ```
-   CACHEBUST=1
-   INSTALL_COQUI=true
-   DOWNLOAD_COQUI_MODEL=true
+   CACHEBUST=2
+   DOWNLOAD_DEEPSPEECH_MODEL=true
    ```
    - For additional engines, add their install flags:
    ```
@@ -30,7 +29,7 @@
 4. **Set Environment Variables**
    - In "App Configs" → "Environmental Variables", add:
    ```
-   STT_ENGINE=coqui
+   STT_ENGINE=deepspeech
    MAX_ENGINE_WORKERS=2
    LOG_LEVEL=INFO
    ```

@@ -15,13 +15,12 @@ RUN pip install -r /requirements.pip
 # Install optional STT engines based on build args
 ARG INSTALL_WHISPER=false
 ARG INSTALL_VOSK=false
-ARG INSTALL_COQUI=true
+ARG INSTALL_COQUI=false
 ARG INSTALL_SILERO=false
 ARG INSTALL_WAV2VEC2=false
-ARG DOWNLOAD_COQUI_MODEL=false
 
-# Install Coqui by default or when explicitly requested
-RUN if [ "$INSTALL_COQUI" = "true" ] || [ "$DOWNLOAD_COQUI_MODEL" = "true" ]; then pip install STT; fi
+# Note: stt package (DeepSpeech/Coqui fork) is installed from requirements.pip
+# Don't install STT package as it conflicts with stt
 RUN if [ "$INSTALL_WHISPER" = "true" ]; then pip install openai-whisper; fi
 RUN if [ "$INSTALL_VOSK" = "true" ]; then pip install vosk; fi
 RUN if [ "$INSTALL_SILERO" = "true" ]; then pip install torch torchaudio omegaconf; fi
@@ -36,24 +35,15 @@ RUN apt-get update \
 RUN mkdir /app
 
 # Download default models (optional - can be mounted as volumes instead)
-ARG DOWNLOAD_DEEPSPEECH_MODEL=false
-ARG DOWNLOAD_COQUI_MODEL=true
+ARG DOWNLOAD_DEEPSPEECH_MODEL=true
 ARG DOWNLOAD_VOSK_MODEL=false
 
-# DeepSpeech model
+# Download DeepSpeech/Coqui model (the stt package works with both formats)
 RUN if [ "$DOWNLOAD_DEEPSPEECH_MODEL" = "true" ]; then \
-    wget --progress=dot:giga --tries=3 --timeout=30 \
-    https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.pbmm \
-    -O /app/model.pbmm || \
-    echo "Warning: Failed to download DeepSpeech model"; \
-    fi
-
-# Coqui model - always download to model.tflite for backward compatibility
-RUN if [ "$DOWNLOAD_COQUI_MODEL" = "true" ]; then \
     wget --progress=dot:giga --tries=3 --timeout=30 \
     https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocab/model.tflite \
     -O /app/model.tflite || \
-    echo "Warning: Failed to download Coqui model"; \
+    echo "Warning: Failed to download model"; \
     fi
 
 # Vosk model
@@ -78,7 +68,7 @@ COPY --chown=app:app ./stts/ /app/stts/
 WORKDIR /app
 
 # Default environment variables
-ENV STT_ENGINE=coqui
+ENV STT_ENGINE=deepspeech
 ENV MAX_ENGINE_WORKERS=2
 ENV LOG_LEVEL=INFO
 ENV WHISPER_MODEL_SIZE=base
