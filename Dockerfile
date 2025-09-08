@@ -2,7 +2,7 @@ FROM python:3.9 as build
 
 # Cache bust to ensure fresh builds
 ARG CACHEBUST=12
-RUN echo "Cache bust: ${CACHEBUST}1"
+RUN echo "Cache bust: ${CACHEBUST}12"
 
 RUN pip install -U pip virtualenv \
  && virtualenv -p `which python3` /venv/

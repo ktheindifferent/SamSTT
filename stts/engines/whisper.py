@@ -7,6 +7,16 @@ from ..base_engine import BaseSTTEngine
 class WhisperEngine(BaseSTTEngine):
     """Whisper.cpp Engine - Fast C++ implementation of OpenAI's Whisper"""
     
+    def _scan_available_models(self):
+        """Scan for available models in the model directory"""
+        model_dir = os.environ.get('PYWHISPERCPP_MODEL_DIR', '/app/models/whisper')
+        available_models = []
+        if Path(model_dir).exists():
+            for model_file in Path(model_dir).glob('ggml-*.bin'):
+                model_type = model_file.name.replace('ggml-', '').replace('.bin', '')
+                available_models.append(model_type)
+        return sorted(available_models)
+    
     def initialize(self):
         """Initialize Whisper.cpp model"""
         try:
@@ -35,24 +45,16 @@ class WhisperEngine(BaseSTTEngine):
             model_name = model_map.get(model_name, model_name)
             self.model_name = model_name  # Store for config display
             
-            # Check for available models in model directory
-            model_dir = os.environ.get('PYWHISPERCPP_MODEL_DIR', '/app/models/whisper')
-            available_models = []
-            if Path(model_dir).exists():
-                for model_file in Path(model_dir).glob('ggml-*.bin'):
-                    model_type = model_file.name.replace('ggml-', '').replace('.bin', '')
-                    available_models.append(model_type)
-            
-            # Always set available_models, even if empty, so it shows in config
-            self.available_models = available_models
+            # Scan for available models (initial scan)
+            self.available_models = self._scan_available_models()
             
             # Log what models we found
             import logging
             logger = logging.getLogger(__name__)
-            if available_models:
-                logger.info(f"Found Whisper models: {available_models}")
+            if self.available_models:
+                logger.info(f"Found Whisper models: {self.available_models}")
             else:
-                logger.warning(f"No Whisper models found in {model_dir}")
+                logger.warning(f"No Whisper models found initially - will be downloaded on first use")
             
             # Check for custom model path
             model_path = self.config.get('model_path')
@@ -116,6 +118,22 @@ class WhisperEngine(BaseSTTEngine):
             
         except Exception as e:
             raise Exception(f"Whisper.cpp transcription failed: {e}")
+    
+    def get_detailed_config(self) -> dict:
+        """Get detailed configuration with up-to-date available models"""
+        config = self.config.copy()
+        
+        # Always refresh available models to catch newly downloaded ones
+        self.available_models = self._scan_available_models()
+        
+        # Add available models
+        config['available_models'] = self.available_models
+        
+        # Add model name if we have one
+        if hasattr(self, 'model_name'):
+            config['model_name'] = self.model_name
+            
+        return config
     
     def _check_availability(self) -> bool:
         """Check if Whisper.cpp is available"""

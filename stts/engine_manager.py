@@ -354,12 +354,23 @@ class STTEngineManager:
                 else:
                     # Try to get more diagnostic info for unavailable engines
                     try:
-                        engine = self.ENGINES[name]({})
+                        # First check if we can create the engine class
+                        engine_class = self.ENGINES[name]
+                        engine = engine_class({})
                         available = engine.is_available
                         error_msg = None
+                        
+                        # Try to get more details about why it's not available
+                        if not available:
+                            try:
+                                # Attempt initialization to get specific error
+                                engine.initialize()
+                                error_msg = "Engine initialized but marked as unavailable"
+                            except Exception as init_error:
+                                error_msg = f"Initialization failed: {str(init_error)}"
                     except Exception as e:
                         available = False
-                        error_msg = str(e)
+                        error_msg = f"Engine creation failed: {str(e)}"
                     
                     info[name] = {
                         'available': available,
