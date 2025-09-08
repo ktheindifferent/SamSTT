@@ -1,7 +1,7 @@
 FROM python:3.9 as build
 
 # Cache bust to ensure fresh builds
-ARG CACHEBUST=5
+ARG CACHEBUST=6
 RUN echo "Cache bust: ${CACHEBUST}"
 
 RUN pip install -U pip virtualenv \
@@ -70,15 +70,27 @@ RUN if [ "$DOWNLOAD_VOSK_MODEL" = "true" ]; then \
     echo "Warning: Failed to download Vosk model"; \
     fi
 
+# Create app user and directories with proper permissions
 RUN groupadd --gid=1000 app \
- && useradd --uid=1000 --gid=1000 --system app
-USER app
+ && useradd --uid=1000 --gid=1000 --system --create-home app \
+ && mkdir -p /app/cache /app/results /app/models \
+ && chown -R app:app /app /home/app
 
 COPY --from=build --chown=app:app /venv/ /venv/
 ENV PATH=/venv/bin/:$PATH
 
 COPY --chown=app:app ./stts/ /app/stts/
+
+# Switch to app user
+USER app
+
 WORKDIR /app
+
+# Set environment variables for cache and model paths
+ENV HF_HOME=/app/cache/huggingface
+ENV TRANSFORMERS_CACHE=/app/cache/transformers
+ENV PYWHISPERCPP_MODEL_DIR=/app/models/whisper
+ENV BENCHMARK_RESULTS_FILE=/app/results/benchmark_results.json
 
 # Default environment variables
 ENV STT_ENGINE=coqui

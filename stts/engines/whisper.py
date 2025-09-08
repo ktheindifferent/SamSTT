@@ -35,15 +35,27 @@ class WhisperEngine(BaseSTTEngine):
             
             # Check for custom model path
             model_path = self.config.get('model_path')
-            if model_path and Path(model_path).exists():
-                # Use custom model file
-                self.model = Model(model_path)
-            else:
-                # Download and use default model
-                self.model = Model(model_name, n_threads=self.config.get('n_threads', 4))
             
-            # Set language if specified
-            self.language = self.config.get('language', None)
+            try:
+                if model_path and Path(model_path).exists():
+                    # Use custom model file
+                    self.model = Model(model_path)
+                else:
+                    # Set model directory from environment or use default
+                    import os
+                    model_dir = os.environ.get('PYWHISPERCPP_MODEL_DIR', None)
+                    # Download and use default model
+                    self.model = Model(model_name, 
+                                     n_threads=self.config.get('n_threads', 4),
+                                     models_dir=model_dir)
+                
+                # Set language if specified
+                self.language = self.config.get('language', None)
+                
+            except Exception as init_error:
+                # If initialization fails, mark as unavailable
+                self.model = None
+                raise Exception(f"Whisper.cpp model initialization failed: {init_error}")
             
         except ImportError:
             raise ImportError("Whisper.cpp (pywhispercpp) not installed. Install with: pip install pywhispercpp")
@@ -52,6 +64,9 @@ class WhisperEngine(BaseSTTEngine):
     
     def transcribe_raw(self, audio_data: np.ndarray, sample_rate: int = 16000) -> str:
         """Transcribe using Whisper.cpp"""
+        if not hasattr(self, 'model') or self.model is None:
+            raise Exception("Whisper.cpp model not initialized")
+            
         try:
             # Whisper.cpp expects float32 audio in range [-1, 1]
             if audio_data.dtype == np.int16:
