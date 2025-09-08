@@ -48,11 +48,16 @@ class NeMoEngine(BaseSTTEngine):
         try:
             import nemo.collections.asr as nemo_asr
             import torch
+            import os
             
-            # Get model configuration
-            model_name = self.config.get('model_name', 'QuartzNet15x5Base-En')
+            # Get model configuration - use a more reliable small model
+            model_name = self.config.get('model_name', 'stt_en_quartznet15x5')
             self.device = self.config.get('device', 'cpu')
             restore_from = self.config.get('restore_from', None)
+            
+            # Create cache directory
+            cache_dir = '/app/cache/nemo'
+            os.makedirs(cache_dir, exist_ok=True)
             
             if restore_from and Path(restore_from).exists():
                 # Load from local checkpoint
@@ -61,11 +66,23 @@ class NeMoEngine(BaseSTTEngine):
                     map_location=self.device
                 )
             else:
-                # Load pretrained model from NGC
-                self.model = nemo_asr.models.ASRModel.from_pretrained(
-                    model_name=model_name,
-                    map_location=self.device
-                )
+                # Load pretrained model from NGC with timeout protection
+                try:
+                    self.model = nemo_asr.models.ASRModel.from_pretrained(
+                        model_name=model_name,
+                        map_location=self.device
+                    )
+                except Exception as download_error:
+                    # Try alternative model name format
+                    if 'stt_en_quartznet15x5' in model_name:
+                        alt_model = 'QuartzNet15x5Base-En'
+                        logger.warning(f"Primary model {model_name} failed, trying {alt_model}: {download_error}")
+                        self.model = nemo_asr.models.ASRModel.from_pretrained(
+                            model_name=alt_model,
+                            map_location=self.device
+                        )
+                    else:
+                        raise download_error
             
             self.model.eval()
             

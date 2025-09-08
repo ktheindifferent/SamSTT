@@ -2,7 +2,10 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import numpy as np
 import os
+import logging
 from ..base_engine import BaseSTTEngine
+
+logger = logging.getLogger(__name__)
 
 
 class PocketSphinxEngine(BaseSTTEngine):
@@ -14,20 +17,38 @@ class PocketSphinxEngine(BaseSTTEngine):
             from pocketsphinx import Pocketsphinx, get_model_path, get_data_path
             
             # Get configuration
-            model_path = self.config.get('model_path', get_model_path())
-            data_path = self.config.get('data_path', get_data_path())
+            try:
+                model_path = self.config.get('model_path', get_model_path())
+                data_path = self.config.get('data_path', get_data_path())
+            except Exception as path_error:
+                # Fallback to manual paths if get_model_path fails
+                logger.warning(f"Could not get default paths: {path_error}, using fallback")
+                model_path = self.config.get('model_path', '/usr/local/share/pocketsphinx/model')
+                data_path = self.config.get('data_path', '/usr/local/share/pocketsphinx/model')
             
-            # Configure decoder parameters
-            config = {
-                'hmm': self.config.get('hmm', os.path.join(model_path, 'en-us')),
-                'lm': self.config.get('lm', os.path.join(model_path, 'en-us.lm.bin')),
-                'dict': self.config.get('dict', os.path.join(model_path, 'cmudict-en-us.dict'))
-            }
+            # Configure decoder parameters with fallback paths
+            hmm_path = self.config.get('hmm', os.path.join(model_path, 'en-us'))
+            lm_path = self.config.get('lm', os.path.join(model_path, 'en-us.lm.bin'))
+            dict_path = self.config.get('dict', os.path.join(model_path, 'cmudict-en-us.dict'))
+            
+            # Check if paths exist, use simpler config if not
+            config = {}
+            if os.path.exists(hmm_path):
+                config['hmm'] = hmm_path
+            if os.path.exists(lm_path):
+                config['lm'] = lm_path
+            if os.path.exists(dict_path):
+                config['dict'] = dict_path
             
             # Add optional parameters
             if 'keyphrase' in self.config:
                 config['keyphrase'] = self.config['keyphrase']
                 config['kws_threshold'] = self.config.get('kws_threshold', 1e-20)
+            
+            # If no model files found, try basic initialization
+            if not config:
+                logger.warning("No PocketSphinx model files found, trying basic initialization")
+                config = {}  # Let PocketSphinx use defaults
             
             self.ps = Pocketsphinx(**config)
             self.sample_rate = 16000  # PocketSphinx expects 16kHz

@@ -329,7 +329,7 @@ class STTEngineManager:
                     'name': engine.name,
                     'available': engine.is_available,
                     'initialized': True,
-                    'config': engine.config
+                    'config': engine.get_detailed_config() if hasattr(engine, 'get_detailed_config') else engine.config
                 }
             elif engine_name in self.ENGINES:
                 return {
@@ -349,7 +349,7 @@ class STTEngineManager:
                     info[name] = {
                         'available': engine.is_available,
                         'initialized': True,
-                        'config': engine.config
+                        'config': engine.get_detailed_config() if hasattr(engine, 'get_detailed_config') else engine.config
                     }
                 else:
                     info[name] = {

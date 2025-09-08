@@ -411,3 +411,17 @@ class BaseSTTEngine(ABC):
     def _check_availability(self) -> bool:
         """Override this to check if the engine is available"""
         return True
+    
+    def get_detailed_config(self) -> dict:
+        """Get detailed configuration including available models"""
+        config = self.config.copy()
+        
+        # Add available models if the engine supports it
+        if hasattr(self, 'available_models') and self.available_models:
+            config['available_models'] = self.available_models
+            
+        # Add model name if the engine has one
+        if hasattr(self, 'model_name'):
+            config['model_name'] = self.model_name
+            
+        return config

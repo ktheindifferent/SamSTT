@@ -11,9 +11,10 @@ class WhisperEngine(BaseSTTEngine):
         """Initialize Whisper.cpp model"""
         try:
             from pywhispercpp.model import Model
+            import os
             
             # Get model configuration
-            model_name = self.config.get('model_size', 'base')
+            model_name = self.config.get('model_size', os.environ.get('WHISPER_MODEL_SIZE', 'base'))
             
             # Map model sizes to whisper.cpp model names
             model_map = {
@@ -32,6 +33,17 @@ class WhisperEngine(BaseSTTEngine):
             }
             
             model_name = model_map.get(model_name, model_name)
+            self.model_name = model_name  # Store for config display
+            
+            # Check for available models in model directory
+            model_dir = os.environ.get('PYWHISPERCPP_MODEL_DIR', '/app/models/whisper')
+            available_models = []
+            if Path(model_dir).exists():
+                for model_file in Path(model_dir).glob('ggml-*.bin'):
+                    model_type = model_file.name.replace('ggml-', '').replace('.bin', '')
+                    available_models.append(model_type)
+            
+            self.available_models = available_models
             
             # Check for custom model path
             model_path = self.config.get('model_path')
@@ -41,13 +53,15 @@ class WhisperEngine(BaseSTTEngine):
                     # Use custom model file
                     self.model = Model(model_path)
                 else:
-                    # Set model directory from environment or use default
-                    import os
-                    model_dir = os.environ.get('PYWHISPERCPP_MODEL_DIR', None)
-                    # Download and use default model
-                    self.model = Model(model_name, 
-                                     n_threads=self.config.get('n_threads', 4),
-                                     models_dir=model_dir)
+                    # Try to use specific model file if available
+                    specific_model_path = Path(model_dir) / f'ggml-{model_name}.bin'
+                    if specific_model_path.exists():
+                        self.model = Model(str(specific_model_path))
+                    else:
+                        # Fall back to download or default
+                        self.model = Model(model_name, 
+                                         n_threads=self.config.get('n_threads', 4),
+                                         models_dir=model_dir)
                 
                 # Set language if specified
                 self.language = self.config.get('language', None)

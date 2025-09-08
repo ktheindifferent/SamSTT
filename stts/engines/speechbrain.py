@@ -10,28 +10,24 @@ class SpeechBrainEngine(BaseSTTEngine):
     def initialize(self):
         """Initialize SpeechBrain model"""
         try:
-            from speechbrain.pretrained import EncoderDecoderASR, EncoderASR
+            from speechbrain.pretrained import EncoderDecoderASR
             import torch
+            import os
             
-            # Get model configuration
-            source = self.config.get('source', 'speechbrain/asr-crdnn-rnnlm-librispeech')
-            savedir = self.config.get('savedir', 'pretrained_models/asr-crdnn')
-            model_type = self.config.get('model_type', 'encoder_decoder')  # or 'encoder'
+            # Get model configuration - use a simpler, more reliable model
+            source = self.config.get('source', 'speechbrain/asr-wav2vec2-commonvoice-en')
+            savedir = self.config.get('savedir', '/app/cache/speechbrain/asr-wav2vec2')
             self.device = self.config.get('device', 'cpu')
             
-            # Load appropriate model type
-            if model_type == 'encoder':
-                self.model = EncoderASR.from_hparams(
-                    source=source,
-                    savedir=savedir,
-                    run_opts={"device": self.device}
-                )
-            else:
-                self.model = EncoderDecoderASR.from_hparams(
-                    source=source,
-                    savedir=savedir,
-                    run_opts={"device": self.device}
-                )
+            # Create savedir if it doesn't exist
+            os.makedirs(savedir, exist_ok=True)
+            
+            # Load model with simplified approach
+            self.model = EncoderDecoderASR.from_hparams(
+                source=source,
+                savedir=savedir,
+                run_opts={"device": self.device}
+            )
             
         except ImportError as e:
             raise ImportError(f"SpeechBrain not installed: {e}. Install with: pip install speechbrain")

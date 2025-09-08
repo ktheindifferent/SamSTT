@@ -35,11 +35,18 @@ ARG INSTALL_POCKETSPHINX=false
 
 # Note: stt package (Coqui STT) is installed from requirements.pip
 
-# Install all engines if INSTALL_ALL is true (simplified to avoid build issues)
+# Install all engines if INSTALL_ALL is true
 RUN if [ "$INSTALL_ALL" = "true" ]; then \
-    pip install --no-cache-dir pywhispercpp vosk transformers torch librosa && \
+    echo "Installing all STT engines..." && \
+    pip install --no-cache-dir pywhispercpp vosk transformers torch librosa torchaudio omegaconf && \
+    echo "Installing SpeechBrain..." && \
+    pip install --no-cache-dir speechbrain || echo "SpeechBrain install failed, continuing..." && \
+    echo "Installing NeMo..." && \
+    pip install --no-cache-dir nemo_toolkit[asr] || echo "NeMo install failed, continuing..." && \
+    echo "Installing PocketSphinx..." && \
     pip install --no-cache-dir pocketsphinx || echo "PocketSphinx install failed, continuing..." && \
-    pip install --no-cache-dir torchaudio omegaconf || echo "Silero deps install failed, continuing..."; \
+    echo "Installing additional dependencies..." && \
+    pip install --no-cache-dir soundfile scipy || echo "Additional deps install failed, continuing..."; \
     fi
 
 # Install individual engines if not installing all
