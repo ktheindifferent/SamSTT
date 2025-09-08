@@ -37,19 +37,17 @@ ARG INSTALL_POCKETSPHINX=false
 
 # Install all engines if INSTALL_ALL is true
 RUN if [ "$INSTALL_ALL" = "true" ]; then \
-    echo "Installing all STT engines..." && \
+    echo "Installing core STT engines..." && \
     pip install --no-cache-dir pywhispercpp vosk transformers torch librosa torchaudio omegaconf && \
-    echo "Installing additional dependencies first..." && \
+    echo "Installing additional dependencies..." && \
     pip install --no-cache-dir soundfile scipy && \
-    echo "Installing SpeechBrain..." && \
-    (pip install --no-cache-dir speechbrain || echo "SpeechBrain install failed, continuing...") && \
-    echo "Installing NeMo..." && \
-    (pip install --no-cache-dir "nemo_toolkit[asr]" || echo "NeMo install failed, continuing...") && \
+    echo "Installing SpeechBrain (basic)..." && \
+    (pip install --no-cache-dir speechbrain --no-deps && pip install --no-cache-dir torch torchaudio transformers sentencepiece || echo "SpeechBrain install failed, continuing...") && \
     echo "Installing PocketSphinx..." && \
     (pip install --no-cache-dir pocketsphinx || echo "PocketSphinx install failed, continuing...") && \
+    echo "Skipping NeMo due to complex dependencies..." && \
     echo "Verifying installations..." && \
     python -c "import speechbrain; print('SpeechBrain: OK')" || echo "SpeechBrain: FAILED" && \
-    python -c "import nemo; print('NeMo: OK')" || echo "NeMo: FAILED" && \
     python -c "import pocketsphinx; print('PocketSphinx: OK')" || echo "PocketSphinx: FAILED"; \
     fi
 
@@ -65,7 +63,15 @@ RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_POCKETSPHINX" = "true" ]; the
 FROM python:3.9
 
 RUN apt-get update \
- && apt-get install --no-install-recommends -y ffmpeg wget \
+ && apt-get install --no-install-recommends -y \
+    ffmpeg wget \
+    portaudio19-dev \
+    python3-dev \
+    gcc \
+    g++ \
+    build-essential \
+    libasound2-dev \
+    libsndfile1-dev \
  && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /app

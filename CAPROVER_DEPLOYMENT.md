@@ -72,8 +72,9 @@ Based on testing with INSTALL_ALL=true:
 - **Whisper.cpp**: ~2s (base model)
 
 **Engines with INSTALL_ALL=true:**
-- ✅ **Working with models**: Coqui, Whisper.cpp (all sizes), Vosk, Silero, Wav2Vec2, SpeechBrain, NeMo, PocketSphinx
-- 🎯 **All 8 engines installed**: Complete STT solution with automatic fallback
+- ✅ **Working with models**: Coqui, Whisper.cpp (all sizes), Vosk, Silero, Wav2Vec2, SpeechBrain, PocketSphinx
+- ⚠️ **Temporarily skipped**: NeMo (complex dependencies causing build failures)
+- 🎯 **7 engines installed**: Complete STT solution with automatic fallback
 
 ## Recommended Configurations
 
@@ -91,10 +92,11 @@ MAX_ENGINE_WORKERS=4
 RUN_BENCHMARK_ON_STARTUP=true
 ```
 **What you get:**
-- 8 working STT engines (Coqui, Whisper.cpp, Vosk, Silero, Wav2Vec2, SpeechBrain, NeMo, PocketSphinx)
+- 7 working STT engines (Coqui, Whisper.cpp, Vosk, Silero, Wav2Vec2, SpeechBrain, PocketSphinx)
 - All Whisper model sizes available (tiny, base, small, medium, large-v3)
 - Automatic benchmark to find fastest engine for your hardware
 - Complete offline STT solution with automatic fallback
+- Note: NeMo temporarily skipped due to build complexity
 
 ### Basic Setup (Coqui STT)
 **Build Args:**
