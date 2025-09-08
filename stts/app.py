@@ -228,7 +228,7 @@ async def security_response_middleware(request, response):
     response.headers['Content-Security-Policy'] = "default-src 'self'"
 
 
-@app.before_server_start
+@app.listener('before_server_start')
 async def setup_executor(app, loop):
     """Initialize resources on server start"""
     logger.info(f"Initializing ThreadPoolExecutor with {MAX_ENGINE_WORKERS} workers")
@@ -241,7 +241,7 @@ async def setup_executor(app, loop):
     logger.info(f"Security settings: Max file size: {MAX_FILE_SIZE/1024/1024:.1f}MB, Request timeout: {REQUEST_TIMEOUT}s")
 
 
-@app.before_server_stop
+@app.listener('before_server_stop')
 async def shutdown_executor(app, loop):
     """Gracefully shutdown ThreadPoolExecutor before server stops"""
     logger.info("Initiating graceful shutdown of ThreadPoolExecutor...")

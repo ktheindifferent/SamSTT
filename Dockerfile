@@ -74,7 +74,7 @@ COPY --chown=app:app ./stts/ /app/stts/
 WORKDIR /app
 
 # Default environment variables
-ENV STT_ENGINE=deepspeech
+ENV STT_ENGINE=coqui
 ENV MAX_ENGINE_WORKERS=2
 ENV LOG_LEVEL=INFO
 ENV WHISPER_MODEL_SIZE=base
