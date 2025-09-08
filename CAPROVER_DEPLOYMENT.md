@@ -16,7 +16,7 @@
 3. **Configure Docker Build Arguments**
    - In "App Configs" → "Build Arguments", add:
    ```
-   CACHEBUST=7
+   CACHEBUST=8
    DOWNLOAD_COQUI_MODEL=true
    ```
    - To install ALL engines for benchmarking:
@@ -66,7 +66,7 @@ The service can automatically benchmark all available engines on startup to dete
 ### Basic Setup (Coqui STT)
 **Build Args:**
 ```
-CACHEBUST=7
+CACHEBUST=8
 DOWNLOAD_COQUI_MODEL=true
 ```
 **Environment:**

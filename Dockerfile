@@ -1,7 +1,7 @@
 FROM python:3.9 as build
 
 # Cache bust to ensure fresh builds
-ARG CACHEBUST=7
+ARG CACHEBUST=8
 RUN echo "Cache bust: ${CACHEBUST}"
 
 RUN pip install -U pip virtualenv \
@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir \
     wheel \
     setuptools \
     Cython \
-    numpy<2.0.0
+    "numpy<2.0.0"
 
 ADD ./requirements.pip /requirements.pip
 RUN pip install -r /requirements.pip
