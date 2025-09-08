@@ -1,7 +1,7 @@
 FROM python:3.9 as build
 
 # Cache bust to ensure fresh builds
-ARG CACHEBUST=8
+ARG CACHEBUST=9
 RUN echo "Cache bust: ${CACHEBUST}"
 
 RUN pip install -U pip virtualenv \

@@ -78,10 +78,13 @@ class WhisperEngine(BaseSTTEngine):
             audio_data = np.clip(audio_data, -1.0, 1.0)
             
             # Transcribe with options
+            # Whisper.cpp expects language as a string, not None
+            lang = self.language if self.language else 'en'
+            
+            # Basic transcribe without optional parameters that might cause issues
             segments = self.model.transcribe(
                 audio_data,
-                language=self.language,
-                initial_prompt=self.config.get('initial_prompt', None)
+                language=lang
             )
             
             # Combine all segments into single transcript

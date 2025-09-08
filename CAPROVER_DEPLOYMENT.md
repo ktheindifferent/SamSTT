@@ -16,7 +16,7 @@
 3. **Configure Docker Build Arguments**
    - In "App Configs" → "Build Arguments", add:
    ```
-   CACHEBUST=8
+   CACHEBUST=9
    DOWNLOAD_COQUI_MODEL=true
    ```
    - To install ALL engines for benchmarking:
@@ -61,12 +61,19 @@ The service can automatically benchmark all available engines on startup to dete
 - Fastest engine identification
 - Success/failure status
 
+**Typical Performance Results:**
+Based on testing with INSTALL_ALL=true:
+- **Wav2Vec2**: ~0.1s (fastest)
+- **Silero**: ~0.14s
+- **Coqui**: ~1.5s
+- **Whisper.cpp**: ~0.5-2s (depends on model size)
+
 ## Recommended Configurations
 
 ### Basic Setup (Coqui STT)
 **Build Args:**
 ```
-CACHEBUST=8
+CACHEBUST=9
 DOWNLOAD_COQUI_MODEL=true
 ```
 **Environment:**
