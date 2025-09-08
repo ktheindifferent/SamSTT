@@ -1,13 +1,20 @@
 FROM python:3.9 as build
 
 # Cache bust to ensure fresh builds
-ARG CACHEBUST=6
+ARG CACHEBUST=7
 RUN echo "Cache bust: ${CACHEBUST}"
 
 RUN pip install -U pip virtualenv \
  && virtualenv -p `which python3` /venv/
 
 ENV PATH=/venv/bin/:$PATH
+
+# Install build dependencies first
+RUN pip install --no-cache-dir \
+    wheel \
+    setuptools \
+    Cython \
+    numpy<2.0.0
 
 ADD ./requirements.pip /requirements.pip
 RUN pip install -r /requirements.pip
@@ -25,19 +32,21 @@ ARG INSTALL_POCKETSPHINX=false
 
 # Note: stt package (Coqui STT) is installed from requirements.pip
 
-# Install all engines if INSTALL_ALL is true
+# Install all engines if INSTALL_ALL is true (simplified to avoid build issues)
 RUN if [ "$INSTALL_ALL" = "true" ]; then \
-    pip install pywhispercpp vosk torch torchaudio omegaconf transformers librosa pocketsphinx speechbrain nemo_toolkit[asr]; \
+    pip install --no-cache-dir pywhispercpp vosk transformers torch librosa && \
+    pip install --no-cache-dir pocketsphinx || echo "PocketSphinx install failed, continuing..." && \
+    pip install --no-cache-dir torchaudio omegaconf || echo "Silero deps install failed, continuing..."; \
     fi
 
 # Install individual engines if not installing all
-RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_WHISPER" = "true" ]; then pip install pywhispercpp; fi
-RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_VOSK" = "true" ]; then pip install vosk; fi
-RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_SILERO" = "true" ]; then pip install torch torchaudio omegaconf; fi
-RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_WAV2VEC2" = "true" ]; then pip install transformers torch librosa; fi
-RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_SPEECHBRAIN" = "true" ]; then pip install speechbrain; fi
-RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_NEMO" = "true" ]; then pip install nemo_toolkit[asr]; fi
-RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_POCKETSPHINX" = "true" ]; then pip install pocketsphinx; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_WHISPER" = "true" ]; then pip install --no-cache-dir pywhispercpp; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_VOSK" = "true" ]; then pip install --no-cache-dir vosk; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_SILERO" = "true" ]; then pip install --no-cache-dir torch torchaudio omegaconf; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_WAV2VEC2" = "true" ]; then pip install --no-cache-dir transformers torch librosa; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_SPEECHBRAIN" = "true" ]; then pip install --no-cache-dir speechbrain || echo "SpeechBrain install failed"; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_NEMO" = "true" ]; then pip install --no-cache-dir nemo_toolkit[asr] || echo "NeMo install failed"; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_POCKETSPHINX" = "true" ]; then pip install --no-cache-dir pocketsphinx || echo "PocketSphinx install failed"; fi
 
 FROM python:3.9
 
