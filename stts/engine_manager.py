@@ -8,11 +8,6 @@ from .base_engine import BaseSTTEngine
 
 # Import engines with optional dependencies
 try:
-    from .engines.deepspeech import DeepSpeechEngine
-except ImportError:
-    DeepSpeechEngine = None
-
-try:
     from .engines.whisper import WhisperEngine
 except ImportError:
     WhisperEngine = None
@@ -63,8 +58,6 @@ class STTEngineManager:
     ENGINES = {}
     
     # Populate engines that were successfully imported
-    if DeepSpeechEngine:
-        ENGINES['deepspeech'] = DeepSpeechEngine
     if WhisperEngine:
         ENGINES['whisper'] = WhisperEngine
     if CoquiEngine:

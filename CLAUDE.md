@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-This is a Unified Speech-to-Text (STT) REST API service that provides a single, consistent interface for multiple offline STT engines. The service is designed to be flexible, scalable, and backward-compatible with legacy DeepSpeech APIs while supporting modern STT engines like Whisper, Vosk, and others.
+This is a Unified Speech-to-Text (STT) REST API service that provides a single, consistent interface for multiple offline STT engines. The service is designed to be flexible, scalable, and API-compatible while supporting modern STT engines like Whisper.cpp, Coqui, Vosk, and others.
 
 ## Key Features
 
 - **Multi-Engine Support**: Supports 9 different STT engines with automatic fallback
 - **Unified API**: Single API interface regardless of underlying engine
-- **Backward Compatible**: Maintains compatibility with legacy DeepSpeech API
+- **API Compatible**: Maintains compatibility with common STT API patterns
 - **Engine Selection**: Per-request engine selection via query params or headers
 - **Automatic Fallback**: Falls back to other engines if primary fails
 - **Concurrent Processing**: Thread pool executor for parallel processing
@@ -29,15 +29,14 @@ This is a Unified Speech-to-Text (STT) REST API service that provides a single, 
 │   ├── engine_manager.py      # Engine lifecycle & selection manager
 │   └── engines/               # Individual STT engine implementations
 │       ├── __init__.py
-│       ├── coqui.py          # Coqui STT (DeepSpeech successor)
-│       ├── deepspeech.py     # Mozilla DeepSpeech (legacy)
+│       ├── coqui.py          # Coqui STT (maintained successor to DeepSpeech)
 │       ├── nemo.py           # NVIDIA NeMo
 │       ├── pocketsphinx.py   # CMU PocketSphinx
 │       ├── silero.py         # Silero (PyTorch-based)
 │       ├── speechbrain.py    # SpeechBrain toolkit
 │       ├── vosk.py           # Vosk (Kaldi-based)
 │       ├── wav2vec2.py       # Facebook Wav2Vec2
-│       └── whisper.py        # OpenAI Whisper
+│       └── whisper.py        # Whisper.cpp (fast C++ implementation)
 ├── Dockerfile                 # Multi-stage Docker build
 ├── docker-compose.yml         # Multiple service configurations
 ├── requirements.pip           # Core dependencies

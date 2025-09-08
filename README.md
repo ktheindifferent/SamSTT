@@ -3,40 +3,38 @@ Unified STT Service
 A unified Speech-to-Text REST API service supporting multiple offline STT engines.
 
 ## Features
-- **Multiple STT Engine Support**: DeepSpeech, Whisper, Coqui, Vosk, Silero, Wav2Vec2
+- **Multiple STT Engine Support**: Coqui, Whisper.cpp, Vosk, Silero, Wav2Vec2
 - **Unified API**: Single API interface for all engines
 - **Automatic Fallback**: Falls back to other engines if primary fails
 - **Engine Selection**: Choose engine per request or use default
-- **Backward Compatible**: Maintains compatibility with legacy DeepSpeech API
+- **API Compatible**: Maintains compatibility with common STT API patterns
 
 ## Supported STT Engines
 
-### 1. Mozilla DeepSpeech (Legacy)
+### 1. Coqui STT
 - Fast, lightweight
+- The maintained successor to Mozilla DeepSpeech
 - Requires pre-trained model files (.pbmm or .tflite)
+- Active development and community
 
-### 2. OpenAI Whisper
+### 2. Whisper.cpp
+- Fast C++ implementation of OpenAI's Whisper
 - State-of-the-art accuracy
 - Multiple model sizes (tiny, base, small, medium, large)
 - Supports 100+ languages
-- No separate model download needed
+- Much faster than original OpenAI implementation
 
-### 3. Coqui STT
-- Successor to Mozilla DeepSpeech
-- Compatible with DeepSpeech models
-- Active development and community
-
-### 4. Vosk
+### 3. Vosk
 - Lightweight, supports 20+ languages
 - Works offline with small models
 - Good for embedded systems
 
-### 5. Silero
+### 4. Silero
 - PyTorch-based models
 - Fast inference
 - Multiple language support
 
-### 6. Wav2Vec2
+### 5. Wav2Vec2
 - Facebook/Meta's transformer-based model
 - High accuracy
 - HuggingFace integration
@@ -80,11 +78,11 @@ curl http://127.0.0.1:8000/api/v1/engines
 
 Response:
 {
-  "available": ["deepspeech", "whisper"],
-  "all": ["deepspeech", "whisper", "coqui", "vosk", "silero", "wav2vec2"],
-  "default": "whisper",
+  "available": ["coqui", "whisper"],
+  "all": ["coqui", "whisper", "vosk", "silero", "wav2vec2"],
+  "default": "coqui",
   "details": {
-    "deepspeech": {"available": true, "initialized": true, ...},
+    "coqui": {"available": true, "initialized": true, ...},
     "whisper": {"available": true, "initialized": true, ...}
   }
 }
@@ -147,12 +145,9 @@ pip install transformers torch
 
 #### 3. Download Models (if needed)
 
-**For DeepSpeech/Coqui:**
+**For Coqui STT:**
 ```bash
-# DeepSpeech model
-wget https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/deepspeech-0.9.3-models.pbmm -O model.pbmm
-
-# Or Coqui model
+# Coqui model
 wget <coqui-model-url> -O coqui_model.tflite
 ```
 
@@ -173,7 +168,7 @@ Set environment variables to configure the service:
 
 ```bash
 # Default STT engine
-export STT_ENGINE=whisper  # or deepspeech, coqui, vosk, silero, wav2vec2
+export STT_ENGINE=coqui  # or whisper, vosk, silero, wav2vec2
 
 # Whisper configuration
 export WHISPER_MODEL_SIZE=base  # tiny, base, small, medium, large
@@ -230,8 +225,8 @@ docker build -t unified-stt:latest .
 # Run with Whisper (no model volume needed)
 docker run -p 8000:8000 -e STT_ENGINE=whisper unified-stt:latest
 
-# Run with DeepSpeech (mount model)
-docker run -p 8000:8000 -v $(pwd)/model.pbmm:/app/model.pbmm:ro unified-stt:latest
+# Run with Coqui (mount model)
+docker run -p 8000:8000 -v $(pwd)/model.tflite:/app/model.tflite:ro unified-stt:latest
 ```
 
 ## Engine Selection Strategy
@@ -247,9 +242,8 @@ The service uses the following strategy for engine selection:
 
 | Engine | Speed | Accuracy | Memory | Languages | Notes |
 |--------|-------|----------|---------|-----------|-------|
-| DeepSpeech | Fast | Good | Low | English | Legacy, no longer maintained |
-| Whisper | Slow-Medium | Excellent | Medium-High | 100+ | Best accuracy, GPU recommended for large models |
-| Coqui | Fast | Good | Low | Multiple | Active development |
+| Coqui | Fast | Good | Low | Multiple | Active development, DeepSpeech successor |
+| Whisper.cpp | Medium | Excellent | Medium | 100+ | Fast C++ implementation, best accuracy |
 | Vosk | Fast | Good | Low | 20+ | Good for embedded/mobile |
 | Silero | Fast | Good | Medium | Multiple | Requires PyTorch |
 | Wav2Vec2 | Medium | Very Good | High | Multiple | Transformer-based |
@@ -264,9 +258,9 @@ The service uses the following strategy for engine selection:
 
 ## API Migration Guide
 
-### From Legacy DeepSpeech API
+### From Legacy APIs
 
-The service is fully backward compatible. Your existing code will continue to work:
+The service maintains API compatibility. Your existing code will continue to work:
 
 ```bash
 # Old code still works

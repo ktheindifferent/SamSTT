@@ -1,7 +1,7 @@
 FROM python:3.9 as build
 
 # Cache bust to ensure fresh builds
-ARG CACHEBUST=4
+ARG CACHEBUST=5
 RUN echo "Cache bust: ${CACHEBUST}"
 
 RUN pip install -U pip virtualenv \
@@ -23,16 +23,15 @@ ARG INSTALL_SPEECHBRAIN=false
 ARG INSTALL_NEMO=false
 ARG INSTALL_POCKETSPHINX=false
 
-# Note: stt package (DeepSpeech/Coqui fork) is installed from requirements.pip
-# Don't install STT package as it conflicts with stt
+# Note: stt package (Coqui STT) is installed from requirements.pip
 
 # Install all engines if INSTALL_ALL is true
 RUN if [ "$INSTALL_ALL" = "true" ]; then \
-    pip install openai-whisper vosk torch torchaudio omegaconf transformers librosa pocketsphinx speechbrain nemo_toolkit[asr]; \
+    pip install pywhispercpp vosk torch torchaudio omegaconf transformers librosa pocketsphinx speechbrain nemo_toolkit[asr]; \
     fi
 
 # Install individual engines if not installing all
-RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_WHISPER" = "true" ]; then pip install openai-whisper; fi
+RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_WHISPER" = "true" ]; then pip install pywhispercpp; fi
 RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_VOSK" = "true" ]; then pip install vosk; fi
 RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_SILERO" = "true" ]; then pip install torch torchaudio omegaconf; fi
 RUN if [ "$INSTALL_ALL" != "true" ] && [ "$INSTALL_WAV2VEC2" = "true" ]; then pip install transformers torch librosa; fi
@@ -49,11 +48,11 @@ RUN apt-get update \
 RUN mkdir /app
 
 # Download default models (optional - can be mounted as volumes instead)
-ARG DOWNLOAD_DEEPSPEECH_MODEL=true
+ARG DOWNLOAD_COQUI_MODEL=true
 ARG DOWNLOAD_VOSK_MODEL=false
 
-# Download DeepSpeech/Coqui model (the stt package works with both formats)
-RUN if [ "$DOWNLOAD_DEEPSPEECH_MODEL" = "true" ]; then \
+# Download Coqui STT model
+RUN if [ "$DOWNLOAD_COQUI_MODEL" = "true" ]; then \
     wget --progress=dot:giga --tries=3 --timeout=30 \
     https://coqui.gateway.scarf.sh/english/coqui/v1.0.0-huge-vocab/model.tflite \
     -O /app/model.tflite || \

@@ -5,64 +5,81 @@ from ..base_engine import BaseSTTEngine
 
 
 class WhisperEngine(BaseSTTEngine):
-    """OpenAI Whisper STT Engine (offline)"""
+    """Whisper.cpp Engine - Fast C++ implementation of OpenAI's Whisper"""
     
     def initialize(self):
-        """Initialize Whisper model"""
+        """Initialize Whisper.cpp model"""
         try:
-            import whisper
-            model_size = self.config.get('model_size', 'base')
-            self.device = self.config.get('device', 'cpu')
-            download_root = self.config.get('download_root', None)
+            from pywhispercpp.model import Model
             
-            # Load model
-            self.model = whisper.load_model(
-                model_size, 
-                device=self.device,
-                download_root=download_root
-            )
+            # Get model configuration
+            model_name = self.config.get('model_size', 'base')
             
-            # Set default options
-            self.transcribe_options = {
-                'language': self.config.get('language', None),
-                'task': self.config.get('task', 'transcribe'),
-                'fp16': self.config.get('fp16', False),
-                'verbose': self.config.get('verbose', False)
+            # Map model sizes to whisper.cpp model names
+            model_map = {
+                'tiny': 'tiny',
+                'tiny.en': 'tiny.en',
+                'base': 'base',
+                'base.en': 'base.en', 
+                'small': 'small',
+                'small.en': 'small.en',
+                'medium': 'medium',
+                'medium.en': 'medium.en',
+                'large-v1': 'large-v1',
+                'large-v2': 'large-v2',
+                'large-v3': 'large-v3',
+                'large': 'large-v3'  # Default to latest
             }
             
-            # Import librosa once during initialization to avoid memory leaks
-            # from repeated dynamic imports in transcribe_raw
-            try:
-                import librosa
-                self.librosa = librosa
-            except ImportError:
-                # librosa is optional - only needed for resampling
-                self.librosa = None
-                
+            model_name = model_map.get(model_name, model_name)
+            
+            # Check for custom model path
+            model_path = self.config.get('model_path')
+            if model_path and Path(model_path).exists():
+                # Use custom model file
+                self.model = Model(model_path)
+            else:
+                # Download and use default model
+                self.model = Model(model_name, n_threads=self.config.get('n_threads', 4))
+            
+            # Set language if specified
+            self.language = self.config.get('language', None)
+            
         except ImportError:
-            raise ImportError("Whisper package not installed. Install with: pip install openai-whisper")
+            raise ImportError("Whisper.cpp (pywhispercpp) not installed. Install with: pip install pywhispercpp")
         except Exception as e:
-            raise Exception(f"Failed to initialize Whisper: {e}")
+            raise Exception(f"Failed to initialize Whisper.cpp: {e}")
     
     def transcribe_raw(self, audio_data: np.ndarray, sample_rate: int = 16000) -> str:
-        """Transcribe using Whisper"""
-        # Convert to float32 and normalize
-        audio_float = audio_data.astype(np.float32) / 32768.0
-        
-        # Whisper expects audio at 16kHz
-        if sample_rate != 16000:
-            if self.librosa is None:
-                raise RuntimeError("librosa not available for resampling. Install with: pip install librosa")
-            audio_float = self.librosa.resample(audio_float, orig_sr=sample_rate, target_sr=16000)
-        
-        # Transcribe
-        result = self.model.transcribe(audio_float, **self.transcribe_options)
-        return result['text'].strip()
+        """Transcribe using Whisper.cpp"""
+        try:
+            # Whisper.cpp expects float32 audio in range [-1, 1]
+            if audio_data.dtype == np.int16:
+                audio_data = audio_data.astype(np.float32) / 32768.0
+            elif audio_data.dtype != np.float32:
+                audio_data = audio_data.astype(np.float32)
+            
+            # Ensure audio is in correct range
+            audio_data = np.clip(audio_data, -1.0, 1.0)
+            
+            # Transcribe with options
+            segments = self.model.transcribe(
+                audio_data,
+                language=self.language,
+                initial_prompt=self.config.get('initial_prompt', None)
+            )
+            
+            # Combine all segments into single transcript
+            transcript = ' '.join([seg.text for seg in segments])
+            return transcript.strip()
+            
+        except Exception as e:
+            raise Exception(f"Whisper.cpp transcription failed: {e}")
     
     def _check_availability(self) -> bool:
-        """Check if Whisper is available"""
+        """Check if Whisper.cpp is available"""
         try:
-            import whisper
+            import pywhispercpp
             return True
         except ImportError:
             return False

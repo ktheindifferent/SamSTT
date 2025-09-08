@@ -16,13 +16,13 @@
 3. **Configure Docker Build Arguments**
    - In "App Configs" → "Build Arguments", add:
    ```
-   CACHEBUST=4
-   DOWNLOAD_DEEPSPEECH_MODEL=true
+   CACHEBUST=5
+   DOWNLOAD_COQUI_MODEL=true
    ```
    - To install ALL engines for benchmarking:
    ```
    INSTALL_ALL=true
-   DOWNLOAD_DEEPSPEECH_MODEL=true
+   DOWNLOAD_COQUI_MODEL=true
    DOWNLOAD_VOSK_MODEL=true
    ```
    - Or install specific engines:
@@ -63,11 +63,11 @@ The service can automatically benchmark all available engines on startup to dete
 
 ## Recommended Configurations
 
-### Basic Setup (Coqui STT - DeepSpeech successor)
+### Basic Setup (Coqui STT)
 **Build Args:**
 ```
-CACHEBUST=4
-DOWNLOAD_DEEPSPEECH_MODEL=true
+CACHEBUST=5
+DOWNLOAD_COQUI_MODEL=true
 ```
 **Environment:**
 ```
