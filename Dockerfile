@@ -1,8 +1,8 @@
 FROM python:3.9 as build
 
 # Cache bust to ensure fresh builds
-ARG CACHEBUST=11
-RUN echo "Cache bust: ${CACHEBUST}"
+ARG CACHEBUST=12
+RUN echo "Cache bust: ${CACHEBUST}1"
 
 RUN pip install -U pip virtualenv \
  && virtualenv -p `which python3` /venv/
@@ -39,14 +39,18 @@ ARG INSTALL_POCKETSPHINX=false
 RUN if [ "$INSTALL_ALL" = "true" ]; then \
     echo "Installing all STT engines..." && \
     pip install --no-cache-dir pywhispercpp vosk transformers torch librosa torchaudio omegaconf && \
+    echo "Installing additional dependencies first..." && \
+    pip install --no-cache-dir soundfile scipy && \
     echo "Installing SpeechBrain..." && \
-    pip install --no-cache-dir speechbrain || echo "SpeechBrain install failed, continuing..." && \
+    (pip install --no-cache-dir speechbrain || echo "SpeechBrain install failed, continuing...") && \
     echo "Installing NeMo..." && \
-    pip install --no-cache-dir nemo_toolkit[asr] || echo "NeMo install failed, continuing..." && \
+    (pip install --no-cache-dir "nemo_toolkit[asr]" || echo "NeMo install failed, continuing...") && \
     echo "Installing PocketSphinx..." && \
-    pip install --no-cache-dir pocketsphinx || echo "PocketSphinx install failed, continuing..." && \
-    echo "Installing additional dependencies..." && \
-    pip install --no-cache-dir soundfile scipy || echo "Additional deps install failed, continuing..."; \
+    (pip install --no-cache-dir pocketsphinx || echo "PocketSphinx install failed, continuing...") && \
+    echo "Verifying installations..." && \
+    python -c "import speechbrain; print('SpeechBrain: OK')" || echo "SpeechBrain: FAILED" && \
+    python -c "import nemo; print('NeMo: OK')" || echo "NeMo: FAILED" && \
+    python -c "import pocketsphinx; print('PocketSphinx: OK')" || echo "PocketSphinx: FAILED"; \
     fi
 
 # Install individual engines if not installing all

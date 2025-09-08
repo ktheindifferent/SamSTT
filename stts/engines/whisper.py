@@ -43,7 +43,16 @@ class WhisperEngine(BaseSTTEngine):
                     model_type = model_file.name.replace('ggml-', '').replace('.bin', '')
                     available_models.append(model_type)
             
+            # Always set available_models, even if empty, so it shows in config
             self.available_models = available_models
+            
+            # Log what models we found
+            import logging
+            logger = logging.getLogger(__name__)
+            if available_models:
+                logger.info(f"Found Whisper models: {available_models}")
+            else:
+                logger.warning(f"No Whisper models found in {model_dir}")
             
             # Check for custom model path
             model_path = self.config.get('model_path')

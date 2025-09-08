@@ -416,8 +416,8 @@ class BaseSTTEngine(ABC):
         """Get detailed configuration including available models"""
         config = self.config.copy()
         
-        # Add available models if the engine supports it
-        if hasattr(self, 'available_models') and self.available_models:
+        # Add available models if the engine supports it (even if empty)
+        if hasattr(self, 'available_models'):
             config['available_models'] = self.available_models
             
         # Add model name if the engine has one

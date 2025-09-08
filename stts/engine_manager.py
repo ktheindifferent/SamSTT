@@ -352,10 +352,20 @@ class STTEngineManager:
                         'config': engine.get_detailed_config() if hasattr(engine, 'get_detailed_config') else engine.config
                     }
                 else:
+                    # Try to get more diagnostic info for unavailable engines
+                    try:
+                        engine = self.ENGINES[name]({})
+                        available = engine.is_available
+                        error_msg = None
+                    except Exception as e:
+                        available = False
+                        error_msg = str(e)
+                    
                     info[name] = {
-                        'available': False,
+                        'available': available,
                         'initialized': False,
-                        'config': self.config.get(name, {})
+                        'config': self.config.get(name, {}),
+                        'error': error_msg if error_msg else None
                     }
             return info
     
